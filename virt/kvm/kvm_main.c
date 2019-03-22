@@ -3975,6 +3975,26 @@ static void kvm_sched_out(struct preempt_notifier *pn,
 	kvm_arch_vcpu_put(vcpu);
 }
 
+/*
+ * First step : try to run vmxon on each cpu at the end of vmx_init
+ */
+void hypx86_set_up_vmxon(void) {
+	int r;
+
+	r = hardware_enable_all();
+	if (r) {
+		pr_info("[OUR-DEV-ERROR] in vmx_init. hardware_enable_all failed!\n");
+		//goto out_err_no_disable;
+	}
+
+//out_err_no_disable:
+	/* TODO :
+	 * we may need some other code to deal with the error here, like in
+	 * virt/kvm/kvm_main.c, or not.
+	 */
+}
+EXPORT_SYMBOL_GPL(hypx86_set_up_vmxon);
+
 int kvm_init(void *opaque, unsigned vcpu_size, unsigned vcpu_align,
 		  struct module *module)
 {

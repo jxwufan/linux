@@ -562,6 +562,7 @@ static inline void kvm_irqfd_exit(void)
 {
 }
 #endif
+void hypx86_set_up_vmxon(void);
 int kvm_init(void *opaque, unsigned vcpu_size, unsigned vcpu_align,
 		  struct module *module);
 void kvm_exit(void);

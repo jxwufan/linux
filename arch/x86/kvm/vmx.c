@@ -65,6 +65,8 @@
 MODULE_AUTHOR("Qumranet");
 MODULE_LICENSE("GPL");
 
+struct loaded_vmcs hpyx86_vmcs;
+
 static const struct x86_cpu_id vmx_cpu_id[] = {
 	X86_FEATURE_MATCH(X86_FEATURE_VMX),
 	{}
@@ -13137,6 +13139,12 @@ static struct kvm_x86_ops vmx_x86_ops __ro_after_init = {
 	.enable_smi_window = enable_smi_window,
 };
 
+void hypx86_set_up_vmcs(void) {
+	int err;
+
+	err = alloc_loaded_vmcs(&hpyx86_vmcs);
+}
+
 static int __init vmx_init(void)
 {
 	int r;
@@ -13181,8 +13189,21 @@ static int __init vmx_init(void)
 #endif
 	vmx_check_vmcs12_offsets();
 
+	pr_info("[OUR-DEV-INFO] in vmx_init. Check pr_info\n");
+
+	/* 
+	 * First step : try to run vmxon on each cpu at the end of vmx_init
+	 */ 
+	hypx86_set_up_vmxon();
+
+	/*
+	 * Second step : set up a vmcs
+	 */
+	hypx86_set_up_vmcs();
+
 	return 0;
 }
+
 
 static void __exit vmx_exit(void)
 {
