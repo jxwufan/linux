@@ -15,6 +15,7 @@
  * the COPYING file in the top-level directory.
  *
  */
+#include "hypx86.h"
 
 #include "irq.h"
 #include "mmu.h"
@@ -82,7 +83,7 @@ module_param_named(vnmi, enable_vnmi, bool, S_IRUGO);
 static bool __read_mostly flexpriority_enabled = 1;
 module_param_named(flexpriority, flexpriority_enabled, bool, S_IRUGO);
 
-static bool __read_mostly enable_ept = 1;
+static bool __read_mostly enable_ept = 0;
 module_param_named(ept, enable_ept, bool, S_IRUGO);
 
 static bool __read_mostly enable_unrestricted_guest = 1;
@@ -13139,12 +13140,6 @@ static struct kvm_x86_ops vmx_x86_ops __ro_after_init = {
 	.enable_smi_window = enable_smi_window,
 };
 
-void hypx86_set_up_vmcs(void) {
-	int err;
-
-	err = alloc_loaded_vmcs(&hpyx86_vmcs);
-}
-
 static int __init vmx_init(void)
 {
 	int r;
@@ -13238,5 +13233,146 @@ static void __exit vmx_exit(void)
 #endif
 }
 
+void hypx86_set_up_vmcs(void) {
+	int err;
+
+	err = alloc_loaded_vmcs(&hpyx86_vmcs);
+
+/* start to set up vmcs*/
+	
+	/* first load vmcs */
+
+	/* second config vmcs */
+
+}
+
+
+
+/*
+ * static void hypx86_init_vmcs_guest_state(void)
+ *
+ * Initialize the guest state fields essentially as a clone of 
+ * the host state fields. Some host state fields have fixed 
+ * values, and we set the corresponding guest state fields accordingly.
+ * 
+ * we need some changes here.
+ *
+ * Learn from "tools/testing/selftests/kvm/lib/vmx.c"
+ */
+static void hypx86_init_vmcs_guest_state(void) {
+	//vmcs_writel(GUEST_RSP, vcpu->arch.regs[VCPU_REGS_RSP]);
+	//vmcs_writel(GUEST_RIP, vcpu->arch.regs[VCPU_REGS_RIP]);
+	vmcs_writel(GUEST_RSP, ); // use original RSP
+	vmcs_writel(GUEST_RIP, ); // use address of next function after vmx_init (may be another function)
+
+
+
+
+	/* following fields of CS, SS, DS, ES, FS, GS, LDTR, and TR
+	 *	selector (16 bits)
+	 *	Base address (64 bits)
+	 *	Segment limit (32 bits)
+	 *	Access rights (32 bits)
+	 */
+}
+
+/*
+ * static void hypx86_init_vmcs_host_state(void)
+ *
+ * Initialize the host state fields based on the current host state, with
+ * the exception of HOST_RSP and HOST_RIP, which should be set by
+ * vmlaunch or vmresume.
+ *
+ * we need some changes here.
+ *
+ * Learn from 
+ *	tools/testing/selftests/kvm/lib/vmx.c
+ *	arch/x86/kvm/vmx.c - vmx_set_constant_host_state
+ *	arch/x86/kvm/vmx.c - vmx_save_host_state
+ *	arch/x86/kvm/vmx.c - vmx_vcpu_load
+ *
+ * Potential Bugs
+ *	1. some registers can't be initiated in this function. should be later?
+ */
+static void hypx86_init_vmcs_host_state(void) {
+	u32 low32, high32;
+	unsigned long tmpl;
+	struct desc_ptr dt;
+	unsigned long cr0, cr3, cr4;
+	unsigned long fs_base, kernel_gs_base;	// probably these two should be init later than this function.
+	int cpu = raw_smp_processor_id();
+	void *gdt = get_current_gdt_ro();
+	unsigned long sysenter_esp;
+
+	/* control registers */
+	cr0 = read_cr0();
+	WARN_ON(cr0 & X86_CR0_TS);
+	vmcs_writel(HOST_CR0, cr0);
+
+	cr3 = __read_cr3();
+	vmcs_writel(HOST_CR3, cr3);
+
+	cr4 = cr4_read_shadow();
+	vmcs_writel(HOST_CR4, cr4);
+
+
+	/* RSP, RIP*/
+	vmcs_writel(HOST_RSP, &low_visor_stack[LOW_VISOR_STACK_SIZE]);
+	vmcs_writel(HOST_RIP, hypx86_return);
+
+
+	/* Selector fields of CS, SS, DS, ES, FS, GS, and TR */
+	vmcs_write16(HOST_CS_SELECTOR, __KERNEL_CS);
+	
+	vmcs_write16(HOST_SS_SELECTOR, __KERNEL_DS);
+
+	vmcs_write16(HOST_DS_SELECTOR, 0);
+	vmcs_write16(HOST_ES_SELECTOR, 0);
+
+	vmcs_write16(HOST_FS_SELECTOR, 0); // not sure
+	vmcs_write16(HOST_GS_SELECTOR, 0); // not sure
+
+	vmcs_write16(HOST_TR_SELECTOR, GDT_ENTRY_TSS*8);
+
+	/* Base-address fields for FS, GS, TR, GDTR, and IDTR (64 bits) */
+	/* maybe FS, GS, TR and GDTR should be inited later than this func */
+	fs_base = current->thread.fsbase;
+	kernel_gs_base = current->thread.gsbase;
+
+	vmcs_writel(HOST_FS_BASE, fs_base);
+	vmcs_writel(HOST_GS_BASE, cpu_kernelmode_gs_base(cpu));
+	pr_info("[OUR-DEB-INFO] kernel_gs_base : %lu, cpu_kernelmode_gs_base : %lu\n", kernel_gs_base, cpu_kernelmode_gs_base(cpu));
+
+	vmcs_writel(HOST_TR_BASE,
+			(unsigned long)&get_cpu_entry_area(cpu)->tss.x86_tss);
+	vmcs_writel(HOST_GDTR_BASE, (unsigned long)gdt);
+	
+	store_idt(&dt);
+	vmcs_writel(HOST_IDTR_BASE, dt.address);
+
+	/* following MSRs
+	 * IA32_SYSENTER_CS (32 bits)
+	 * IA32_SYSENTER_ESP and IA32_SYSENTER_EIP (64 bits)
+	 * IA32_PERF_GLOBAL_CTRL (64 bits)
+	 * IA32_PAT (64 bits)
+	 * IA32_EFER (64 bits)
+	 *
+	 * maybe IA32_SYSENTER_ESP should be set later than this funciton. 
+	 */
+	rdmsr(MSR_IA32_SYSENTER_CS, low32, high32);
+	vmcs_write32(HOST_IA32_SYSENTER_CS, low32);
+	rdmsrl(MSR_IA32_SYSENTER_EIP, tmpl);
+	vmcs_writel(HOST_IA32_SYSENTER_EIP, tmpl);
+
+	rdmsrl(MSR_IA32_SYSENTER_ESP, sysenter_esp);
+	vmcs_writel(HOST_IA32_SYSENTER_ESP, sysenter_esp);
+
+	//IA32_PERF_GLOBAL_CTRL, IA32_PAT, IA32_EFER don't know how to set
+}
+
+static void hypx86_init_vmcs_control_fields(void) {
+}
+
 module_init(vmx_init)
 module_exit(vmx_exit)
+
