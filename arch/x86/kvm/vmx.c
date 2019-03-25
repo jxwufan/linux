@@ -13260,12 +13260,36 @@ void hypx86_set_up_vmcs(void) {
  * Learn from "tools/testing/selftests/kvm/lib/vmx.c"
  */
 static void hypx86_init_vmcs_guest_state(void) {
-	//vmcs_writel(GUEST_RSP, vcpu->arch.regs[VCPU_REGS_RSP]);
-	//vmcs_writel(GUEST_RIP, vcpu->arch.regs[VCPU_REGS_RIP]);
-	vmcs_writel(GUEST_RSP, ); // use original RSP
+	u32 low32, high32;
+	unsigned long tmpl;
+	struct desc_ptr dt;
+	unsigned long cr0, cr3, cr4;
+	unsigned long fs_base, kernel_gs_base;
+	int cpu = raw_smp_processor_id();
+	void *gdt = get_current_gdt_ro();
+	unsigned long sysenter_esp;
+
+
+	
+	
+	/* control registers */
+	cr0 = read_cr0();
+	WARN_ON(cr0 & X86_CR0_TS);
+	vmcs_writel(HOST_CR0, cr0);
+
+	cr3 = __read_cr3();
+	vmcs_writel(HOST_CR3, cr3);
+
+	cr4 = cr4_read_shadow();
+	vmcs_writel(HOST_CR4, cr4);
+
+	/* TODO : Debug register : DR7 */
+	vmcs_writel(GUEST_DR7, 0x400);
+
+	/* TODO : RSP, RIP and RFLAGS */
+	vmcs_writel(GUEST_RSP, ); // use original RSP, should be set right before vmlaunch?
 	vmcs_writel(GUEST_RIP, ); // use address of next function after vmx_init (may be another function)
-
-
+	vmcs_writel(GUEST_RFLAGS, ); // I think we can use the host rflags. we can only read it using asm code. look at my picture.
 
 
 	/* following fields of CS, SS, DS, ES, FS, GS, LDTR, and TR
@@ -13274,6 +13298,123 @@ static void hypx86_init_vmcs_guest_state(void) {
 	 *	Segment limit (32 bits)
 	 *	Access rights (32 bits)
 	 */
+	
+	/* selector */
+	vmcs_write16(GUEST_CS_SELECTOR, __KERNEL_CS);
+	vmcs_write16(GUEST_SS_SELECTOR, __KERNEL_DS);
+	vmcs_write16(GUEST_DS_SELECTOR, get_ds());
+	vmcs_write16(GUEST_ES_SELECTOR, get_es());
+	vmcs_write16(GUEST_FS_SELECTOR, get_fs());
+	vmcs_write16(GUEST_GS_SELECTOR, get_gs());
+	vmcs_write16(GUEST_LDTR_SELECTOR, 0);	// not sure
+	vmcs_write16(GUEST_TR_SELECTOR, get_tr());
+
+	/* base */
+	vmcs_write64(GUEST_CS_BASE, 0);
+	vmcs_write64(GUEST_SS_BASE, 0);
+	vmcs_write64(GUEST_DS_BASE, 0);
+	vmcs_write64(GUEST_ES_BASE, 0);
+	
+	// two ways for GUEST_FS_BASE, GUEST_GS_BASE. not sure am I right.
+	if (likely(is_64bit_mm(current->mm))) {
+		fs_base = current->thread.fsbase;
+		kernel_gs_base = current->thread.gsbase;
+		vmcs_writel(HOST_FS_BASE, fs_base);
+		vmcs_writel(HOST_GS_BASE, cpu_kernelmode_gs_base(cpu));
+		pr_info("[OUR-DEB-INFO-init_vmcs_guest_state] kernel_gs_base : %lu, cpu_kernelmode_gs_base : %lu\n", kernel_gs_base, cpu_kernelmode_gs_base(cpu));
+	} else {
+		rdmsrl(MSR_FS_BASE, tmpl);
+		vmcs_write64(GUEST_FS_BASE, tmpl);
+		rdmsrl(MSR_GS_BASE, tmpl);
+		vmcs_write64(GUEST_GS_BASE, tmpl);
+	}
+
+	vmcs_writel(GUEST_LDTR_BASE, 0);	// not sure. should read from host as well?
+	vmcs_writel(GUEST_TR_BASE,
+			(unsigned long)&get_cpu_entry_area(cpu)->tss.x86_tss);
+
+	/* segment limit : not so important? not sure at all*/
+	vmcs_write32(GUEST_CS_LIMIT, -1);
+	vmcs_write32(GUEST_SS_LIMIT, -1);
+	vmcs_write32(GUEST_DS_LIMIT, -1);
+	vmcs_write32(GUEST_ES_LIMIT, -1);
+	vmcs_write32(GUEST_FS_LIMIT, -1);
+	vmcs_write32(GUEST_GS_LIMIT, -1);
+	vmcs_write32(GUEST_LDTR_LIMIT, -1);
+	vmcs_write32(GUEST_TR_LIMIT, 0x67);
+
+	/* access rights */
+	// please see the intel manual table
+	vmcs_write32(GUEST_CS_LIMIT, );
+	vmcs_write32(GUEST_SS_LIMIT, );
+	vmcs_write32(GUEST_DS_LIMIT, );
+	vmcs_write32(GUEST_ES_LIMIT, );
+	vmcs_write32(GUEST_FS_LIMIT, );
+	vmcs_write32(GUEST_GS_LIMIT, );
+	vmcs_write32(GUEST_LDTR_LIMIT, );
+	vmcs_write32(GUEST_TR_LIMIT, );
+
+
+		
+	/* following fields of GDTR and IDTR
+	 *	Base address (64 bits)
+	 *	Segment limit (32 bits)
+	 */
+
+	/* base address */
+	vmcs_writel(GUEST_GDTR_BASE, (unsigned long)gdt);
+	store_idt(&dt);
+	vmcs_writel(GUEST_IDTR_BASE, dt.address);
+
+	/* segment limit */
+	vmcs_write32(GUEST_GDTR_LIMIT, 0xffff); // not sure, likely(right)
+	vmcs_write32(GUEST_IDTR_LIMIT, 0xffff); // not sure, likely(right)
+
+
+
+	/* the following MSRs
+	 * IA32_DEBUGCTL (64 bits)
+	 * IA32_SYSENTER_CS (32 bits)
+	 * IA32_SYSENTER_ESP and IA32_SYSENTER_EIP (64 bits)
+	 * IA32_PERF_GLOBAL_CTRL (64 bits)
+	 * IA32_PAT (64 bits)
+	 * IA32_EFER (64 bits)
+	 * IA32_BNDCFGS (64 bits), didn't find this
+	 */
+	vmcs_writel(GUEST_IA32_DEBUGCTL, 0);	
+	rdmsr(MSR_IA32_SYSENTER_CS, low32, high32);
+	vmcs_write32(GUEST_IA32_SYSENTER_CS, low32);
+	rdmsrl(MSR_IA32_SYSENTER_EIP, tmpl);
+	vmcs_writel(GUEST_IA32_SYSENTER_EIP, tmpl);
+	rdmsrl(MSR_IA32_SYSENTER_ESP, sysenter_esp);
+	vmcs_writel(GUEST_IA32_SYSENTER_ESP, sysenter_esp);
+
+	if (vmcs_config.vmexit_ctrl & VM_EXIT_LOAD_IA32_PERF_GLOBAL_CTRL) {
+		rdmsr(MSR_IA32_CR_PAT, low32, high32);
+		vmcs_write64(GUEST_IA32_PAT, low32 | ((u64) high32 << 32));
+	}
+	if (vmcs_config.vmexit_ctrl & VM_EXIT_LOAD_IA32_PAT) {
+		rdmsr(MSR_IA32_CR_PAT, low32, high32);
+		vmcs_write64(GUEST_IA32_PAT, low32 | ((u64) high32 << 32));
+	}
+	if (vmcs_config.vmexit_ctrl & VM_EXIT_LOAD_IA32_EFER) {
+		rdmsr(MSR_IA32_CR_PAT, low32, high32);
+		vmcs_write64(GUEST_IA32_PAT, low32 | ((u64) high32 << 32));
+	}
+	if (kvm_mpx_supported()) {
+	//if (boot_cpu_has(X86_FEATURE_MPX)) {
+	//	rdmsrl(MSR_IA32_BNDCFGS, tmpl);
+	//	vmcs_write64(GUEST_BNDCFGS, tmpl);
+		vmcs_write64(GUEST_BNDCFGS, 0);
+		// not sure
+	}
+
+
+	/* SMBASE register (32 bits) */
+
+
+	/* Guest Non-Register States */
+
 }
 
 /*
@@ -13326,8 +13467,8 @@ static void hypx86_init_vmcs_host_state(void) {
 	
 	vmcs_write16(HOST_SS_SELECTOR, __KERNEL_DS);
 
-	vmcs_write16(HOST_DS_SELECTOR, 0);
-	vmcs_write16(HOST_ES_SELECTOR, 0);
+	vmcs_write16(HOST_DS_SELECTOR, 0); // not sure
+	vmcs_write16(HOST_ES_SELECTOR, 0); // not sure
 
 	vmcs_write16(HOST_FS_SELECTOR, 0); // not sure
 	vmcs_write16(HOST_GS_SELECTOR, 0); // not sure
