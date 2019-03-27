@@ -13343,16 +13343,20 @@ static void hypx86_init_vmcs_guest_state(void) {
 	vmcs_write32(GUEST_LDTR_LIMIT, -1);
 	vmcs_write32(GUEST_TR_LIMIT, 0x67);
 
-	/* access rights */
+	/* access rights, not sure */
 	// please see the intel manual table
-	vmcs_write32(GUEST_CS_LIMIT, );
-	vmcs_write32(GUEST_SS_LIMIT, );
-	vmcs_write32(GUEST_DS_LIMIT, );
-	vmcs_write32(GUEST_ES_LIMIT, );
-	vmcs_write32(GUEST_FS_LIMIT, );
-	vmcs_write32(GUEST_GS_LIMIT, );
-	vmcs_write32(GUEST_LDTR_LIMIT, );
-	vmcs_write32(GUEST_TR_LIMIT, );
+	vmcs_write32(GUEST_CS_AR_BYTES, 0xa09b);
+	vmcs_write32(GUEST_SS_AR_BYTES, 0xc093);
+	vmcs_write32(GUEST_DS_AR_BYTES,
+		vmcs_read16(GUEST_DS_SELECTOR) == 0 ? 0x10000 : 0xc093);
+	vmcs_write32(GUEST_ES_AR_BYTES, 
+		vmcs_read16(GUEST_ES_SELECTOR) == 0 ? 0x10000 : 0xc093);
+	vmcs_write32(GUEST_FS_AR_BYTES,
+		vmcs_read16(GUEST_FS_SELECTOR) == 0 ? 0x10000 : 0xc093);
+	vmcs_write32(GUEST_GS_AR_BYTES,
+		vmcs_read16(GUEST_GS_SELECTOR) == 0 ? 0x10000 : 0xc093);
+	vmcs_write32(GUEST_LDTR_AR_BYTES, 0x10000);
+	vmcs_write32(GUEST_TR_AR_BYTES, 0x8b);
 
 
 		
@@ -13369,7 +13373,6 @@ static void hypx86_init_vmcs_guest_state(void) {
 	/* segment limit */
 	vmcs_write32(GUEST_GDTR_LIMIT, 0xffff); // not sure, likely(right)
 	vmcs_write32(GUEST_IDTR_LIMIT, 0xffff); // not sure, likely(right)
-
 
 
 	/* the following MSRs
@@ -13413,8 +13416,36 @@ static void hypx86_init_vmcs_guest_state(void) {
 	/* SMBASE register (32 bits) */
 
 
-	/* Guest Non-Register States */
-
+	/* Guest Non-Register States, not sure
+	 *	1. Activity state (32 bits)
+	 *	2. Interruptibility state (32 bits)
+	 *	3. Pending debug exceptions (64 bits)
+	 *	4. VMCS link pointer (64 bits)
+	 *	5. VMX-preemption timer value (32 bits)
+	 *	6. Page-directory-pointer-table entries (PDPTEs; 64 bits each)
+	 *	7. Guest interrupt status (16 bits)
+	 *		a. Requesting virtual interrupt (RVI)
+	 *		b. Servicing virtual interrupt (SVI)
+	 *	8. PML index (16 bits)
+	 */
+	vmcs_write32(GUEST_ACTIVITY_STATE, 0);
+	vmcs_write32(GUEST_INTERRUPTIBILITY_INFO, 0);
+	vmcs_write64(GUEST_PENDING_DBG_EXCEPTIONS, 0);
+	//vmcs_write64(VMCS_LINK_POINTER, 0xffffffffffffffff);
+	vmcs_write64(VMCS_LINK_POINTER, -1ll);
+		// we don't have shadow vmcs?
+	vmcs_write32(VMX_PREEMPTION_TIMER_VALUE, 0);
+	vmcs_write32(GUEST_PDPTR0, 0);
+	vmcs_write32(GUEST_PDPTR0_HIGH, 0);
+	vmcs_write32(GUEST_PDPTR1, 0);
+	vmcs_write32(GUEST_PDPTR1_HIGH, 0);
+	vmcs_write32(GUEST_PDPTR2, 0);
+	vmcs_write32(GUEST_PDPTR2_HIGH, 0);
+	vmcs_write32(GUEST_PDPTR3, 0);
+	vmcs_write32(GUEST_PDPTR3_HIGH, 0);
+		// if we enable EPT then we need to change PDPTR
+	vmcs_write16(GUEST_INTR_STATUS, 0);
+	vmcs_write16(GUEST_PML_INDEX, 0);
 }
 
 /*
