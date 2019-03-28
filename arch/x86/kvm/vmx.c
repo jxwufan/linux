@@ -13478,13 +13478,16 @@ static void hypx86_init_vmcs_host_state(void) {
 
 	/* control registers */
 	cr0 = read_cr0();
+	//cr0 = get_cr0();
 	WARN_ON(cr0 & X86_CR0_TS);
 	vmcs_writel(HOST_CR0, cr0);
 
 	cr3 = __read_cr3();
+	//cr3 = get_cr3();
 	vmcs_writel(HOST_CR3, cr3);
 
 	cr4 = cr4_read_shadow();
+	//cr4 = get_cr4();
 	vmcs_writel(HOST_CR4, cr4);
 
 
@@ -13555,8 +13558,11 @@ static void hypx86_init_vmcs_control_fields(void) {
 	 *	2. Processor-Based VM-Execution Controls (32 bits)
 	 *	3. Exception Bitmap (32 bits)
 	 *	4. I/O-Bitmap Addresses (64 bits * 2 ?)
-	 *	5. CR3_TARGET_COUNT
-	 *	6. others seem like are not necessary?
+	 *	5. CR3_TARGET_COUNT (32 bits)
+	 *	6. TPR_THRESHOLD (32 bits)
+	 *	7. SECONDARY_VM_EXEC_CONTROL?
+	 *	8. Guest/Host Masks and Read Shadows for CR0 and CR4 (64 bits)
+	 *	9. others seem like are not necessary?
 	 */
 	//min = PIN_BASED_EXT_INTR_MASK | PIN_BASED_NMI_EXITING;
 	//opt = PIN_BASED_VIRTUAL_NMIS | PIN_BASED_POSTED_INTR |
@@ -13568,6 +13574,13 @@ static void hypx86_init_vmcs_control_fields(void) {
 	vmcs_write32(PAGE_FAULT_ERROR_CODE_MASK, 0);
 	vmcs_write32(PAGE_FAULT_ERROR_CODE_MATCH, -1); /* never match, I don't know what is this */
 	vmcs_write32(CR3_TARGET_COUNT, 0);
+	vmcs_write32(TPR_THRESHOLD, 0);
+	vmcs_write32(SECONDARY_VM_EXEC_CONTROL, 0);
+	vmcs_write64(CR0_GUEST_HOST_MASK, 0);
+	vmcs_write64(CR4_GUEST_HOST_MASK, 0);
+	vmcs_write64(CR0_READ_SHADOW, get_cr0());
+	vmcs_write64(CR4_READ_SHADOW, get_cr4());
+
 	
 	
 
