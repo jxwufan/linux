@@ -13543,6 +13543,57 @@ static void hypx86_init_vmcs_host_state(void) {
 }
 
 static void hypx86_init_vmcs_control_fields(void) {
+	u32 vmx_msr_low, vmx_msr_high;
+	u32 min = 0, opt = 0, min2 = 0, op2 = 0;
+	u32 _pin_based_vm_exec_control = 0;
+	u32 _cpu_based_exec_control = 0;
+	u32 _cpu_based_2nd_exec_control = 0;
+	u32 _vmexit_control = 0;
+	u32 _vmentry_control = 0;
+	/* VM-execution control fields
+	 *	1. Pin-Based VM-Execution Controls (32 bits)
+	 *	2. Processor-Based VM-Execution Controls (32 bits)
+	 *	3. Exception Bitmap (32 bits)
+	 *	4. I/O-Bitmap Addresses (64 bits * 2 ?)
+	 *	5. CR3_TARGET_COUNT
+	 *	6. others seem like are not necessary?
+	 */
+	//min = PIN_BASED_EXT_INTR_MASK | PIN_BASED_NMI_EXITING;
+	//opt = PIN_BASED_VIRTUAL_NMIS | PIN_BASED_POSTED_INTR |
+			//PIN_BASED_VMX_PREEMPTION_TIMER;
+	//vmcs_write32(PIN_BASED_VM_EXEC_CONTROL, control_field_value(0, 0, MSR_IA32_VMX_PINBASED_CTLS)); 
+	vmcs_write32(PIN_BASED_VM_EXEC_CONTROL, rdmsr(MSR_IA32_VMX_PINBASED_CTLS));
+	vmcs_write32(CPU_BASED_VM_EXEC_CONTROL, rdmsr(MSR_IA32_VMX_PROCBASE_CTLS));
+	vmcs_write32(EXCEPTION_BITMAP, 0);	// we can control page-fault here
+	vmcs_write32(PAGE_FAULT_ERROR_CODE_MASK, 0);
+	vmcs_write32(PAGE_FAULT_ERROR_CODE_MATCH, -1); /* never match, I don't know what is this */
+	vmcs_write32(CR3_TARGET_COUNT, 0);
+	
+	
+
+	/* VM-exit control fields (basic)
+	 *	1. VM-Exit Controls
+	 *	2. VM_EXIT_MSR_STORE_COUNT, VM_EXIT_MSR_LOAD_COUNT
+	 */
+	min = VM_EXIT_SAVE_DEBUG_CONTROLS | VM_EXIT_ACK_INTR_ON_EXIT | VM_EXIT_HOST_ADDR_SPACE_SIZE;
+	opt = VM_EXIT_SAVE_IA32_PAT | VM_EXIT_LOAD_IA32_PAT | VM_EXIT_CLEAR_BNDCFGS;
+	vmcs_write32(VM_EXIT_CONTROLS, get_control_field_value(min, opt, MSR_IA32_VMX_EXIT_CTLS));
+	vmcs_write32(VM_EXIT_MSR_STORE_COUNT, 0);
+	vmcs_write32(VM_EXIT_MSR_LOAD_COUNT, 0);
+
+	/* VM-entry control fields (basic)
+	 *	1. VM-Entry Controls
+	 *	2. VM_ENTRY_MSR_LOAD_COUNT
+	 *	3. VM-Entry Controls for MSRs (VM-entry MSR-load count, address)
+	 *	4. VM-Entry Controls for Event Injection (VM-entry interruption-information field (32 bits)) 
+	 */
+	min = VM_ENTRY_LOAD_DEBUG_CONTROLS;
+	opt = VM_ENTRY_LOAD_IA32_PAT | VM_ENTRY_LOAD_BNDCFGS;
+	vmcs_write32(VM_ENTRY_CONTROLS, get_control_field_value(min, opt, MSR_IA32_VMX_ENTRY_CTLS));
+	vmcs_write32(VM_ENTRY_MSR_LOAD_COUNT, 0);
+	vmcs_write32(VM_ENTRY_INTR_INFO_FIELD, 0);
+
+	/* VM-exit information fields */
 }
 
 module_init(vmx_init)

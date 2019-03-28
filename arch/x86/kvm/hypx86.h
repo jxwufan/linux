@@ -123,3 +123,19 @@ static inline uint64_t get_idt_base(void)
 	return idt.address;
 }
 
+static u32 get_control_field_value(u32 ctl_min, u32 ctl_opt, u32 msr) {
+	u32 vmx_msr_low, vmx_mrs_high;
+	u32 ctl = ctl_min | ctl_opt;
+
+	rdmsr(msr, vmx_msr_low, vmx_msr_high);
+	ctl &= vmx_msr_high;	/* bit == 0 in high word ==> must be zero */
+	ctl |= vmx_msr_low;		/* bit == 1 in low word ==> must be one */
+
+	/* Ensure minimum (required) set of control bits are supported */
+	if (ctl & ~ctl_min) {
+		pr_info("[HYPE-X86-BUG] control field setting went wrong"); 
+		return -EIO;
+	}
+
+	return ctl;
+}
