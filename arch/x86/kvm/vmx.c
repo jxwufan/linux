@@ -13416,7 +13416,7 @@ static void hypx86_init_vmcs_guest_state(void) {
 	 * IA32_EFER (64 bits)
 	 * IA32_BNDCFGS (64 bits), didn't find this
 	 */
-	vmcs_writel(GUEST_IA32_DEBUGCTL, 0);	
+	vmcs_write64(GUEST_IA32_DEBUGCTL, 0);	
 	rdmsr(MSR_IA32_SYSENTER_CS, low32, high32);
 	vmcs_write32(GUEST_SYSENTER_CS, low32);
 	rdmsrl(MSR_IA32_SYSENTER_EIP, tmpl);
@@ -13425,22 +13425,22 @@ static void hypx86_init_vmcs_guest_state(void) {
 	vmcs_writel(GUEST_SYSENTER_ESP, sysenter_esp);
 
 	if (vmcs_config.vmexit_ctrl & VM_EXIT_LOAD_IA32_PERF_GLOBAL_CTRL) {
-		rdmsr(MSR_IA32_CR_PAT, low32, high32);
-		vmcs_writel(GUEST_IA32_PAT, low32 | ((u64) high32 << 32));
+		rdmsr(MSR_CORE_PERF_GLOBAL_CTRL, low32, high32);
+		vmcs_write64(GUEST_IA32_PERF_GLOBAL_CTRL, low32 | ((u64) high32 << 32));
 	}
 	if (vmcs_config.vmexit_ctrl & VM_EXIT_LOAD_IA32_PAT) {
 		rdmsr(MSR_IA32_CR_PAT, low32, high32);
-		vmcs_writel(GUEST_IA32_PAT, low32 | ((u64) high32 << 32));
+		vmcs_write64(GUEST_IA32_PAT, low32 | ((u64) high32 << 32));
 	}
 	if (vmcs_config.vmexit_ctrl & VM_EXIT_LOAD_IA32_EFER) {
-		rdmsr(MSR_IA32_CR_PAT, low32, high32);
-		vmcs_writel(GUEST_IA32_PAT, low32 | ((u64) high32 << 32));
+		rdmsr(MSR_EFER, low32, high32);
+		vmcs_write64(GUEST_IA32_EFER, low32 | ((u64) high32 << 32));
 	}
 	if (kvm_mpx_supported()) {
 	//if (boot_cpu_has(X86_FEATURE_MPX)) {
 	//	rdmsrl(MSR_IA32_BNDCFGS, tmpl);
 	//	vmcs_write64(GUEST_BNDCFGS, tmpl);
-		vmcs_writel(GUEST_BNDCFGS, 0);
+		vmcs_write64(GUEST_BNDCFGS, 0);
 		// not sure
 	}
 
@@ -13464,7 +13464,7 @@ static void hypx86_init_vmcs_guest_state(void) {
 	vmcs_write32(GUEST_INTERRUPTIBILITY_INFO, 0);
 	vmcs_writel(GUEST_PENDING_DBG_EXCEPTIONS, 0);
 	//vmcs_write64(VMCS_LINK_POINTER, 0xffffffffffffffff);
-	vmcs_writel(VMCS_LINK_POINTER, -1ll);
+	vmcs_write64(VMCS_LINK_POINTER, -1ll);
 		// we don't have shadow vmcs?
 	vmcs_write32(VMX_PREEMPTION_TIMER_VALUE, 0);
 	vmcs_write32(GUEST_PDPTR0, 0);
@@ -13578,14 +13578,14 @@ static void hypx86_init_vmcs_host_state(void) {
 }
 
 static void hypx86_init_vmcs_control_fields(void) {
-	u32 vmx_msr_low, vmx_msr_high;
-	u32 min = 0, opt = 0, min2 = 0, op2 = 0;
-	u64 pin_based_vm_exec_control = 0;
-    u32 pin_based_high32 = 0;
+	//u32 vmx_msr_low, vmx_msr_high;
+	u32 min = 0, opt = 0;
+	//u64 pin_based_vm_exec_control = 0;
+    //u32 pin_based_high32 = 0;
 	u64 cpu_based_exec_control = 0;
-	u32 cpu_based_2nd_exec_control = 0;
-	u32 _vmexit_control = 0;
-	u32 _vmentry_control = 0;
+	//u32 cpu_based_2nd_exec_control = 0;
+	//u32 _vmexit_control = 0;
+	//u32 _vmentry_control = 0;
 	/* VM-execution control fields
 	 *	1. Pin-Based VM-Execution Controls (32 bits)
 	 *	2. Processor-Based VM-Execution Controls (32 bits)
@@ -13597,17 +13597,17 @@ static void hypx86_init_vmcs_control_fields(void) {
 	 *	8. Guest/Host Masks and Read Shadows for CR0 and CR4 (64 bits)
 	 *	9. others seem like are not necessary?
 	 */
-	//min = PIN_BASED_EXT_INTR_MASK | PIN_BASED_NMI_EXITING;
-	//opt = PIN_BASED_VIRTUAL_NMIS | PIN_BASED_POSTED_INTR |
-			//PIN_BASED_VMX_PREEMPTION_TIMER;
-	//vmcs_write32(PIN_BASED_VM_EXEC_CONTROL, control_field_value(0, 0, MSR_IA32_VMX_PINBASED_CTLS));
-    rdmsrl(MSR_IA32_VMX_PINBASED_CTLS, pin_based_vm_exec_control);
-    pin_based_vm_exec_control &= ~PIN_BASED_EXT_INTR_MASK;
-    pin_based_vm_exec_control &= ~PIN_BASED_NMI_EXITING;
+	min = PIN_BASED_EXT_INTR_MASK | PIN_BASED_NMI_EXITING;
+	opt = PIN_BASED_VIRTUAL_NMIS | PIN_BASED_POSTED_INTR |
+			PIN_BASED_VMX_PREEMPTION_TIMER;
+	vmcs_write32(PIN_BASED_VM_EXEC_CONTROL, get_control_field_value(0, 0, MSR_IA32_VMX_PINBASED_CTLS));
+    //rdmsrl(MSR_IA32_VMX_PINBASED_CTLS, pin_based_vm_exec_control);
+    //pin_based_vm_exec_control &= ~PIN_BASED_EXT_INTR_MASK;
+    //pin_based_vm_exec_control &= ~PIN_BASED_NMI_EXITING;
     //pin_based_vm_exec_control &= ~PIN_BASED_VIRTUAL_NMIS;
-    pin_based_vm_exec_control &= ~PIN_BASED_VMX_PREEMPTION_TIMER;
+    //pin_based_vm_exec_control &= ~PIN_BASED_VMX_PREEMPTION_TIMER;
     //pin_based_vm_exec_control &= ~PIN_BASED_POSTED_INTR;
-    vmcs_write32(PIN_BASED_VM_EXEC_CONTROL, pin_based_vm_exec_control);
+    //vmcs_write32(PIN_BASED_VM_EXEC_CONTROL, pin_based_vm_exec_control);
 
 
     rdmsrl(MSR_IA32_VMX_PROCBASED_CTLS, cpu_based_exec_control);
@@ -13618,10 +13618,10 @@ static void hypx86_init_vmcs_control_fields(void) {
 	vmcs_write32(CR3_TARGET_COUNT, 0);
 	vmcs_write32(TPR_THRESHOLD, 0);
 	vmcs_write32(SECONDARY_VM_EXEC_CONTROL, 0);
-	vmcs_write64(CR0_GUEST_HOST_MASK, 0);
-	vmcs_write64(CR4_GUEST_HOST_MASK, 0);
-	vmcs_write64(CR0_READ_SHADOW, get_cr0());
-	vmcs_write64(CR4_READ_SHADOW, get_cr4());	
+	vmcs_writel(CR0_GUEST_HOST_MASK, 0);
+	vmcs_writel(CR4_GUEST_HOST_MASK, 0);
+	vmcs_writel(CR0_READ_SHADOW, get_cr0());
+	vmcs_writel(CR4_READ_SHADOW, get_cr4());	
 
 	/* VM-exit control fields (basic)
 	 *	1. VM-Exit Controls
