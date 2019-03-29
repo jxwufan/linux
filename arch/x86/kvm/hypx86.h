@@ -1,73 +1,80 @@
+#include <asm/msr.h>
 #define LOW_VISOR_STACK_SIZE 128
-unsigned long low_visor_stack[LOW_VISOR_STACK_SIZE];
-extern const ulong hypx86_return; // TODO: we need a to add a label called hypx86_return like "vm_return" in assembly code as the entrance of our ilowvisor handler.
 
+typedef unsigned short u16;
+
+typedef unsigned char u8;
+typedef unsigned int u32;
+
+unsigned long low_visor_stack[LOW_VISOR_STACK_SIZE];
+extern const unsigned long hypx86_return; // TODO: we need a to add a label called hypx86_return like "vm_return" in assembly code as the entrance of our ilowvisor handler.
+extern const unsigned long highvisor_return;
 
 
 void hypx86_set_up_vmcs(void);
 static void hypx86_init_vmcs_guest_state(void);
 static void hypx86_init_vmcs_host_state(void);
 static void hypx86_init_vmcs_control_fields(void);
-
+void hypx86_switch_to_nonroot(void);
 
 /* learn from tools/testing/selftests/kvm/include/x86.h */
-static inline uint16_t get_es(void)
+static inline u16 get_es(void)
 {
-	uint16_t es;
+	u16 es;
 
 	__asm__ __volatile__("mov %%es, %[es]"
 			     : /* output */ [es]"=rm"(es));
 	return es;
 }
 
-static inline uint16_t get_cs(void)
+static inline u16 get_cs(void)
 {
-	uint16_t cs;
+	u16 cs;
 
 	__asm__ __volatile__("mov %%cs, %[cs]"
 			     : /* output */ [cs]"=rm"(cs));
 	return cs;
 }
 
-static inline uint16_t get_ss(void)
+static inline u16 get_ss(void)
 {
-	uint16_t ss;
+	u16 ss;
 
 	__asm__ __volatile__("mov %%ss, %[ss]"
 			     : /* output */ [ss]"=rm"(ss));
 	return ss;
 }
 
-static inline uint16_t get_ds(void)
+static inline u16 get_ds(void)
 {
-	uint16_t ds;
+	u16 ds;
 
 	__asm__ __volatile__("mov %%ds, %[ds]"
 			     : /* output */ [ds]"=rm"(ds));
 	return ds;
 }
 
-static inline uint16_t get_fs(void)
+static inline u16 get_fs(void)
 {
-	uint16_t fs;
+	u16 fs;
 
 	__asm__ __volatile__("mov %%fs, %[fs]"
 			     : /* output */ [fs]"=rm"(fs));
 	return fs;
 }
 
-static inline uint16_t get_gs(void)
+static inline u16 get_gs(void)
 {
-	uint16_t gs;
+	u16 gs;
 
 	__asm__ __volatile__("mov %%gs, %[gs]"
 			     : /* output */ [gs]"=rm"(gs));
 	return gs;
 }
 
-static inline uint16_t get_tr(void)
+static inline u16 get_tr(void)
 {
-	uint16_t tr;
+	u16 tr;
 
 	__asm__ __volatile__("str %[tr]"
 			     : /* output */ [tr]"=rm"(tr));
@@ -75,56 +82,42 @@ static inline uint16_t get_tr(void)
 }
 
 
-static inline uint64_t get_cr0(void)
+static inline u64 get_cr0(void)
 {
-	uint64_t cr0;
+	u64 cr0;
 
 	__asm__ __volatile__("mov %%cr0, %[cr0]"
 			     : /* output */ [cr0]"=r"(cr0));
 	return cr0;
 }
 
-static inline uint64_t get_cr3(void)
+static inline u64 get_cr3(void)
 {
-	uint64_t cr3;
+	u64 cr3;
 
 	__asm__ __volatile__("mov %%cr3, %[cr3]"
 			     : /* output */ [cr3]"=r"(cr3));
 	return cr3;
 }
 
-static inline uint64_t get_cr4(void)
+static inline u64 get_cr4(void)
 {
-	uint64_t cr4;
+	u64 cr4;
 
 	__asm__ __volatile__("mov %%cr4, %[cr4]"
 			     : /* output */ [cr4]"=r"(cr4));
 	return cr4;
 }
 
-static inline void set_cr4(uint64_t val)
+static inline void set_cr4(u64 val)
 {
 	__asm__ __volatile__("mov %0, %%cr4" : : "r" (val) : "memory");
 }
 
-static inline uint64_t get_gdt_base(void)
-{
-	struct desc_ptr gdt;
-	__asm__ __volatile__("sgdt %[gdt]"
-			     : /* output */ [gdt]"=m"(gdt));
-	return gdt.address;
-}
 
-static inline uint64_t get_idt_base(void)
-{
-	struct desc_ptr idt;
-	__asm__ __volatile__("sidt %[idt]"
-			     : /* output */ [idt]"=m"(idt));
-	return idt.address;
-}
 
 static u32 get_control_field_value(u32 ctl_min, u32 ctl_opt, u32 msr) {
-	u32 vmx_msr_low, vmx_mrs_high;
+	u32 vmx_msr_low, vmx_msr_high;
 	u32 ctl = ctl_min | ctl_opt;
 
 	rdmsr(msr, vmx_msr_low, vmx_msr_high);
@@ -134,7 +127,7 @@ static u32 get_control_field_value(u32 ctl_min, u32 ctl_opt, u32 msr) {
 	/* Ensure minimum (required) set of control bits are supported */
 	if (ctl & ~ctl_min) {
 		pr_info("[HYPE-X86-BUG] control field setting went wrong"); 
-		return -EIO;
+		return -1;
 	}
 
 	return ctl;

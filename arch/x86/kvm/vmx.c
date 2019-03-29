@@ -13196,6 +13196,7 @@ static int __init vmx_init(void)
 	 */
 	hypx86_set_up_vmcs();
 
+	hypx86_switch_to_nonroot();
 	return 0;
 }
 
@@ -13241,9 +13242,39 @@ void hypx86_set_up_vmcs(void) {
 /* start to set up vmcs*/
 	
 	/* first load vmcs */
-
+	vmcs_load(hpyx86_vmcs.vmcs);
 	/* second config vmcs */
 
+    hypx86_init_vmcs_host_state();
+    hypx86_init_vmcs_guest_state();
+    hypx86_init_vmcs_control_fields();
+}
+
+void hypx86_switch_to_nonroot(void) {
+  asm(
+		__ex(ASM_VMX_VMWRITE_RSP_RDX) "\n\t"
+		__ex(ASM_VMX_VMLAUNCH) "\n\t"
+		"2: "
+		".pushsection .rodata \n\t"
+		".global hypx86_return \n\t"
+		"hypx86_return: " _ASM_PTR " 2b \n\t"
+		".popsection"
+	      : : "d"((unsigned long)GUEST_RSP)
+	      : "cc", "memory"
+	      );
+
+  pr_info("back in root! lowvisor\n");
+
+  asm(
+	"1: "
+	".pushsection .rodata \n\t"
+	".global highvisor_return \n\t"
+	"highvisor_return: " _ASM_PTR " 1b \n\t"
+	".popsection"
+      );
+
+  pr_info("I am in non-root world! highvisor\n");
+  return;
 }
 
 
@@ -13287,9 +13318,9 @@ static void hypx86_init_vmcs_guest_state(void) {
 	vmcs_writel(GUEST_DR7, 0x400);
 
 	/* TODO : RSP, RIP and RFLAGS */
-	vmcs_writel(GUEST_RSP, ); // use original RSP, should be set right before vmlaunch?
-	vmcs_writel(GUEST_RIP, ); // use address of next function after vmx_init (may be another function)
-	vmcs_writel(GUEST_RFLAGS, ); // I think we can use the host rflags. we can only read it using asm code. look at my picture.
+	//vmcs_writel(GUEST_RSP, ); // use original RSP, should be set right before vmlaunch?
+	vmcs_writel(GUEST_RIP, highvisor_return); // use address of next function after vmx_init (may be another function)
+	//vmcs_writel(GUEST_RFLAGS, ); // I think we can use the host rflags. we can only read it using asm code. look at my picture.
 
 
 	/* following fields of CS, SS, DS, ES, FS, GS, LDTR, and TR
@@ -13302,18 +13333,19 @@ static void hypx86_init_vmcs_guest_state(void) {
 	/* selector */
 	vmcs_write16(GUEST_CS_SELECTOR, __KERNEL_CS);
 	vmcs_write16(GUEST_SS_SELECTOR, __KERNEL_DS);
+#ifndef CONFIG_X86_64
 	vmcs_write16(GUEST_DS_SELECTOR, get_ds());
 	vmcs_write16(GUEST_ES_SELECTOR, get_es());
 	vmcs_write16(GUEST_FS_SELECTOR, get_fs());
 	vmcs_write16(GUEST_GS_SELECTOR, get_gs());
 	vmcs_write16(GUEST_LDTR_SELECTOR, 0);	// not sure
 	vmcs_write16(GUEST_TR_SELECTOR, get_tr());
-
+#endif
 	/* base */
-	vmcs_write64(GUEST_CS_BASE, 0);
-	vmcs_write64(GUEST_SS_BASE, 0);
-	vmcs_write64(GUEST_DS_BASE, 0);
-	vmcs_write64(GUEST_ES_BASE, 0);
+	vmcs_writel(GUEST_CS_BASE, 0);
+	vmcs_writel(GUEST_SS_BASE, 0);
+	vmcs_writel(GUEST_DS_BASE, 0);
+	vmcs_writel(GUEST_ES_BASE, 0);
 	
 	// two ways for GUEST_FS_BASE, GUEST_GS_BASE. not sure am I right.
 	if (likely(is_64bit_mm(current->mm))) {
@@ -13324,9 +13356,9 @@ static void hypx86_init_vmcs_guest_state(void) {
 		pr_info("[OUR-DEB-INFO-init_vmcs_guest_state] kernel_gs_base : %lu, cpu_kernelmode_gs_base : %lu\n", kernel_gs_base, cpu_kernelmode_gs_base(cpu));
 	} else {
 		rdmsrl(MSR_FS_BASE, tmpl);
-		vmcs_write64(GUEST_FS_BASE, tmpl);
+		vmcs_writel(GUEST_FS_BASE, tmpl);
 		rdmsrl(MSR_GS_BASE, tmpl);
-		vmcs_write64(GUEST_GS_BASE, tmpl);
+		vmcs_writel(GUEST_GS_BASE, tmpl);
 	}
 
 	vmcs_writel(GUEST_LDTR_BASE, 0);	// not sure. should read from host as well?
@@ -13386,29 +13418,29 @@ static void hypx86_init_vmcs_guest_state(void) {
 	 */
 	vmcs_writel(GUEST_IA32_DEBUGCTL, 0);	
 	rdmsr(MSR_IA32_SYSENTER_CS, low32, high32);
-	vmcs_write32(GUEST_IA32_SYSENTER_CS, low32);
+	vmcs_write32(GUEST_SYSENTER_CS, low32);
 	rdmsrl(MSR_IA32_SYSENTER_EIP, tmpl);
-	vmcs_writel(GUEST_IA32_SYSENTER_EIP, tmpl);
+	vmcs_writel(GUEST_SYSENTER_EIP, tmpl);
 	rdmsrl(MSR_IA32_SYSENTER_ESP, sysenter_esp);
-	vmcs_writel(GUEST_IA32_SYSENTER_ESP, sysenter_esp);
+	vmcs_writel(GUEST_SYSENTER_ESP, sysenter_esp);
 
 	if (vmcs_config.vmexit_ctrl & VM_EXIT_LOAD_IA32_PERF_GLOBAL_CTRL) {
 		rdmsr(MSR_IA32_CR_PAT, low32, high32);
-		vmcs_write64(GUEST_IA32_PAT, low32 | ((u64) high32 << 32));
+		vmcs_writel(GUEST_IA32_PAT, low32 | ((u64) high32 << 32));
 	}
 	if (vmcs_config.vmexit_ctrl & VM_EXIT_LOAD_IA32_PAT) {
 		rdmsr(MSR_IA32_CR_PAT, low32, high32);
-		vmcs_write64(GUEST_IA32_PAT, low32 | ((u64) high32 << 32));
+		vmcs_writel(GUEST_IA32_PAT, low32 | ((u64) high32 << 32));
 	}
 	if (vmcs_config.vmexit_ctrl & VM_EXIT_LOAD_IA32_EFER) {
 		rdmsr(MSR_IA32_CR_PAT, low32, high32);
-		vmcs_write64(GUEST_IA32_PAT, low32 | ((u64) high32 << 32));
+		vmcs_writel(GUEST_IA32_PAT, low32 | ((u64) high32 << 32));
 	}
 	if (kvm_mpx_supported()) {
 	//if (boot_cpu_has(X86_FEATURE_MPX)) {
 	//	rdmsrl(MSR_IA32_BNDCFGS, tmpl);
 	//	vmcs_write64(GUEST_BNDCFGS, tmpl);
-		vmcs_write64(GUEST_BNDCFGS, 0);
+		vmcs_writel(GUEST_BNDCFGS, 0);
 		// not sure
 	}
 
@@ -13430,9 +13462,9 @@ static void hypx86_init_vmcs_guest_state(void) {
 	 */
 	vmcs_write32(GUEST_ACTIVITY_STATE, 0);
 	vmcs_write32(GUEST_INTERRUPTIBILITY_INFO, 0);
-	vmcs_write64(GUEST_PENDING_DBG_EXCEPTIONS, 0);
+	vmcs_writel(GUEST_PENDING_DBG_EXCEPTIONS, 0);
 	//vmcs_write64(VMCS_LINK_POINTER, 0xffffffffffffffff);
-	vmcs_write64(VMCS_LINK_POINTER, -1ll);
+	vmcs_writel(VMCS_LINK_POINTER, -1ll);
 		// we don't have shadow vmcs?
 	vmcs_write32(VMX_PREEMPTION_TIMER_VALUE, 0);
 	vmcs_write32(GUEST_PDPTR0, 0);
@@ -13492,7 +13524,7 @@ static void hypx86_init_vmcs_host_state(void) {
 
 
 	/* RSP, RIP*/
-	vmcs_writel(HOST_RSP, &low_visor_stack[LOW_VISOR_STACK_SIZE]);
+	vmcs_writel(HOST_RSP, (u64)&low_visor_stack[LOW_VISOR_STACK_SIZE]);
 	vmcs_writel(HOST_RIP, hypx86_return);
 
 
@@ -13548,9 +13580,10 @@ static void hypx86_init_vmcs_host_state(void) {
 static void hypx86_init_vmcs_control_fields(void) {
 	u32 vmx_msr_low, vmx_msr_high;
 	u32 min = 0, opt = 0, min2 = 0, op2 = 0;
-	u32 _pin_based_vm_exec_control = 0;
-	u32 _cpu_based_exec_control = 0;
-	u32 _cpu_based_2nd_exec_control = 0;
+	u64 pin_based_vm_exec_control = 0;
+    u32 pin_based_high32 = 0;
+	u64 cpu_based_exec_control = 0;
+	u32 cpu_based_2nd_exec_control = 0;
 	u32 _vmexit_control = 0;
 	u32 _vmentry_control = 0;
 	/* VM-execution control fields
@@ -13567,9 +13600,18 @@ static void hypx86_init_vmcs_control_fields(void) {
 	//min = PIN_BASED_EXT_INTR_MASK | PIN_BASED_NMI_EXITING;
 	//opt = PIN_BASED_VIRTUAL_NMIS | PIN_BASED_POSTED_INTR |
 			//PIN_BASED_VMX_PREEMPTION_TIMER;
-	//vmcs_write32(PIN_BASED_VM_EXEC_CONTROL, control_field_value(0, 0, MSR_IA32_VMX_PINBASED_CTLS)); 
-	vmcs_write32(PIN_BASED_VM_EXEC_CONTROL, rdmsr(MSR_IA32_VMX_PINBASED_CTLS));
-	vmcs_write32(CPU_BASED_VM_EXEC_CONTROL, rdmsr(MSR_IA32_VMX_PROCBASE_CTLS));
+	//vmcs_write32(PIN_BASED_VM_EXEC_CONTROL, control_field_value(0, 0, MSR_IA32_VMX_PINBASED_CTLS));
+    rdmsrl(MSR_IA32_VMX_PINBASED_CTLS, pin_based_vm_exec_control);
+    pin_based_vm_exec_control &= ~PIN_BASED_EXT_INTR_MASK;
+    pin_based_vm_exec_control &= ~PIN_BASED_NMI_EXITING;
+    //pin_based_vm_exec_control &= ~PIN_BASED_VIRTUAL_NMIS;
+    pin_based_vm_exec_control &= ~PIN_BASED_VMX_PREEMPTION_TIMER;
+    //pin_based_vm_exec_control &= ~PIN_BASED_POSTED_INTR;
+    vmcs_write32(PIN_BASED_VM_EXEC_CONTROL, pin_based_vm_exec_control);
+
+
+    rdmsrl(MSR_IA32_VMX_PROCBASED_CTLS, cpu_based_exec_control);
+    vmcs_write32(CPU_BASED_VM_EXEC_CONTROL, cpu_based_exec_control);
 	vmcs_write32(EXCEPTION_BITMAP, 0);	// we can control page-fault here
 	vmcs_write32(PAGE_FAULT_ERROR_CODE_MASK, 0);
 	vmcs_write32(PAGE_FAULT_ERROR_CODE_MATCH, -1); /* never match, I don't know what is this */
@@ -13579,10 +13621,7 @@ static void hypx86_init_vmcs_control_fields(void) {
 	vmcs_write64(CR0_GUEST_HOST_MASK, 0);
 	vmcs_write64(CR4_GUEST_HOST_MASK, 0);
 	vmcs_write64(CR0_READ_SHADOW, get_cr0());
-	vmcs_write64(CR4_READ_SHADOW, get_cr4());
-
-	
-	
+	vmcs_write64(CR4_READ_SHADOW, get_cr4());	
 
 	/* VM-exit control fields (basic)
 	 *	1. VM-Exit Controls
