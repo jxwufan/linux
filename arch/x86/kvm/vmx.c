@@ -66,7 +66,7 @@
 MODULE_AUTHOR("Qumranet");
 MODULE_LICENSE("GPL");
 
-struct loaded_vmcs hpyx86_vmcs;
+struct loaded_vmcs hypx86_vmcs;
 
 static const struct x86_cpu_id vmx_cpu_id[] = {
 	X86_FEATURE_MATCH(X86_FEATURE_VMX),
@@ -13237,13 +13237,13 @@ static void __exit vmx_exit(void)
 void hypx86_set_up_vmcs(void) {
 	int err;
 
-	err = alloc_loaded_vmcs(&hpyx86_vmcs);
+	err = alloc_loaded_vmcs(&hypx86_vmcs);
 
 /* start to set up vmcs*/
 	
 	/* first load vmcs */
 	loaded_vmcs_clear(&hypx86_vmcs);
-	vmcs_load(hpyx86_vmcs.vmcs);
+	vmcs_load(hypx86_vmcs.vmcs);
 	/* second config vmcs */
 
     hypx86_init_vmcs_host_state();
