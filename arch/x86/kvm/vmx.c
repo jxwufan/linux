@@ -13242,6 +13242,7 @@ void hypx86_set_up_vmcs(void) {
 /* start to set up vmcs*/
 	
 	/* first load vmcs */
+	loaded_vmcs_clear(&hypx86_vmcs);
 	vmcs_load(hpyx86_vmcs.vmcs);
 	/* second config vmcs */
 
