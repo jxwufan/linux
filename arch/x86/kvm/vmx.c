@@ -13296,7 +13296,6 @@ static void hypx86_init_vmcs_guest_state(void) {
 	unsigned long tmpl;
 	struct desc_ptr dt;
 	unsigned long cr0, cr3, cr4;
-	unsigned long fs_base, kernel_gs_base;
 	int cpu = raw_smp_processor_id();
 	void *gdt = get_current_gdt_ro();
 	unsigned long sysenter_esp;
