@@ -13307,13 +13307,13 @@ static void hypx86_init_vmcs_guest_state(void) {
 	/* control registers */
 	cr0 = read_cr0();
 	WARN_ON(cr0 & X86_CR0_TS);
-	vmcs_writel(HOST_CR0, cr0);
+	vmcs_writel(GUEST_CR0, cr0);
 
 	cr3 = __read_cr3();
-	vmcs_writel(HOST_CR3, cr3);
+	vmcs_writel(GUEST_CR3, cr3);
 
 	cr4 = cr4_read_shadow();
-	vmcs_writel(HOST_CR4, cr4);
+	vmcs_writel(GUEST_CR4, cr4);
 
 	/* TODO : Debug register : DR7 */
 	vmcs_writel(GUEST_DR7, 0x400);
@@ -13349,18 +13349,18 @@ static void hypx86_init_vmcs_guest_state(void) {
 	vmcs_writel(GUEST_ES_BASE, 0);
 	
 	// two ways for GUEST_FS_BASE, GUEST_GS_BASE. not sure am I right.
+	/*
 	if (likely(is_64bit_mm(current->mm))) {
 		fs_base = current->thread.fsbase;
 		kernel_gs_base = current->thread.gsbase;
-		vmcs_writel(HOST_FS_BASE, fs_base);
-		vmcs_writel(HOST_GS_BASE, cpu_kernelmode_gs_base(cpu));
+		vmcs_writel(GUEST_FS_BASE, fs_base);
+		vmcs_writel(GUEST_GS_BASE, cpu_kernelmode_gs_base(cpu));
 		pr_info("[OUR-DEB-INFO-init_vmcs_guest_state] kernel_gs_base : %lu, cpu_kernelmode_gs_base : %lu\n", kernel_gs_base, cpu_kernelmode_gs_base(cpu));
-	} else {
-		rdmsrl(MSR_FS_BASE, tmpl);
-		vmcs_writel(GUEST_FS_BASE, tmpl);
-		rdmsrl(MSR_GS_BASE, tmpl);
-		vmcs_writel(GUEST_GS_BASE, tmpl);
-	}
+	}*/
+	rdmsrl(MSR_FS_BASE, tmpl);
+	vmcs_writel(GUEST_FS_BASE, tmpl);
+	rdmsrl(MSR_GS_BASE, tmpl);
+	vmcs_writel(GUEST_GS_BASE, tmpl);
 
 	vmcs_writel(GUEST_LDTR_BASE, 0);	// not sure. should read from host as well?
 	vmcs_writel(GUEST_TR_BASE,
