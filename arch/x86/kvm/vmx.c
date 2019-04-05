@@ -11467,7 +11467,7 @@ static int prepare_vmcs02(struct kvm_vcpu *vcpu, struct vmcs12 *vmcs12,
 	/* vmcs12's VM_ENTRY_LOAD_IA32_EFER and VM_ENTRY_IA32E_MODE are
 	 * emulated by vmx_set_efer(), below.
 	 */
-	vm_entry_controls_init(vmx, 
+	vm_entry_controls_init(vmx,
 		(vmcs12->vm_entry_controls & ~VM_ENTRY_LOAD_IA32_EFER &
 			~VM_ENTRY_IA32E_MODE) |
 		(vmcs_config.vmentry_ctrl & ~VM_ENTRY_IA32E_MODE));
@@ -12504,7 +12504,7 @@ static void nested_vmx_vmexit(struct kvm_vcpu *vcpu, u32 exit_reason,
 
 		return;
 	}
-	
+
 	/*
 	 * After an early L2 VM-entry failure, we're now back
 	 * in L1 which thinks it just finished a VMLAUNCH or
@@ -13186,9 +13186,9 @@ static int __init vmx_init(void)
 
 	pr_info("[OUR-DEV-INFO] in vmx_init. Check pr_info\n");
 
-	/* 
+	/*
 	 * First step : try to run vmxon on each cpu at the end of vmx_init
-	 */ 
+	 */
 	hypx86_set_up_vmxon();
 
 	/*
@@ -13240,7 +13240,7 @@ void hypx86_set_up_vmcs(void) {
 	err = alloc_loaded_vmcs(&hypx86_vmcs);
 
 /* start to set up vmcs*/
-	
+
 	/* first load vmcs */
 	loaded_vmcs_clear(&hypx86_vmcs);
 	vmcs_load(hypx86_vmcs.vmcs);
@@ -13252,7 +13252,8 @@ void hypx86_set_up_vmcs(void) {
 }
 
 void hypx86_switch_to_nonroot(void) {
-  asm(
+	volatile int exit_reason;
+  	asm(
 		__ex(ASM_VMX_VMWRITE_RSP_RDX) "\n\t"
 		__ex(ASM_VMX_VMLAUNCH) "\n\t"
 		"2: "
@@ -13264,18 +13265,19 @@ void hypx86_switch_to_nonroot(void) {
 	      : "cc", "memory"
 	      );
 
-  pr_info("back in root! lowvisor\n");
+	pr_info("back in root! lowvisor\n");
+	exit_reason = vmcs_read32(VM_EXIT_REASON);
+	pr_info("vm exit reason: %x\n", exit_reason);
+  	asm(
+		"1: "
+		".pushsection .rodata \n\t"
+		".global highvisor_return \n\t"
+		"highvisor_return: " _ASM_PTR " 1b \n\t"
+		".popsection"
+		);
 
-  asm(
-	"1: "
-	".pushsection .rodata \n\t"
-	".global highvisor_return \n\t"
-	"highvisor_return: " _ASM_PTR " 1b \n\t"
-	".popsection"
-      );
-
-  pr_info("I am in non-root world! highvisor\n");
-  return;
+	pr_info("I am in non-root world! highvisor\n");
+	return;
 }
 
 
@@ -13283,10 +13285,10 @@ void hypx86_switch_to_nonroot(void) {
 /*
  * static void hypx86_init_vmcs_guest_state(void)
  *
- * Initialize the guest state fields essentially as a clone of 
- * the host state fields. Some host state fields have fixed 
+ * Initialize the guest state fields essentially as a clone of
+ * the host state fields. Some host state fields have fixed
  * values, and we set the corresponding guest state fields accordingly.
- * 
+ *
  * we need some changes here.
  *
  * Learn from "tools/testing/selftests/kvm/lib/vmx.c"
@@ -13302,8 +13304,8 @@ static void hypx86_init_vmcs_guest_state(void) {
 	unsigned long sysenter_esp;
 
 
-	
-	
+
+
 	/* control registers */
 	cr0 = read_cr0();
 	WARN_ON(cr0 & X86_CR0_TS);
@@ -13330,7 +13332,7 @@ static void hypx86_init_vmcs_guest_state(void) {
 	 *	Segment limit (32 bits)
 	 *	Access rights (32 bits)
 	 */
-	
+
 	/* selector */
 	vmcs_write16(GUEST_CS_SELECTOR, __KERNEL_CS);
 	vmcs_write16(GUEST_SS_SELECTOR, __KERNEL_DS);
@@ -13347,20 +13349,21 @@ static void hypx86_init_vmcs_guest_state(void) {
 	vmcs_writel(GUEST_SS_BASE, 0);
 	vmcs_writel(GUEST_DS_BASE, 0);
 	vmcs_writel(GUEST_ES_BASE, 0);
-	
+
 	// two ways for GUEST_FS_BASE, GUEST_GS_BASE. not sure am I right.
+	/*
 	if (likely(is_64bit_mm(current->mm))) {
 		fs_base = current->thread.fsbase;
 		kernel_gs_base = current->thread.gsbase;
 		vmcs_writel(HOST_FS_BASE, fs_base);
 		vmcs_writel(HOST_GS_BASE, cpu_kernelmode_gs_base(cpu));
 		pr_info("[OUR-DEB-INFO-init_vmcs_guest_state] kernel_gs_base : %lu, cpu_kernelmode_gs_base : %lu\n", kernel_gs_base, cpu_kernelmode_gs_base(cpu));
-	} else {
+		} else { */
 		rdmsrl(MSR_FS_BASE, tmpl);
 		vmcs_writel(GUEST_FS_BASE, tmpl);
 		rdmsrl(MSR_GS_BASE, tmpl);
 		vmcs_writel(GUEST_GS_BASE, tmpl);
-	}
+		//	}
 
 	vmcs_writel(GUEST_LDTR_BASE, 0);	// not sure. should read from host as well?
 	vmcs_writel(GUEST_TR_BASE,
@@ -13382,7 +13385,7 @@ static void hypx86_init_vmcs_guest_state(void) {
 	vmcs_write32(GUEST_SS_AR_BYTES, 0xc093);
 	vmcs_write32(GUEST_DS_AR_BYTES,
 		vmcs_read16(GUEST_DS_SELECTOR) == 0 ? 0x10000 : 0xc093);
-	vmcs_write32(GUEST_ES_AR_BYTES, 
+	vmcs_write32(GUEST_ES_AR_BYTES,
 		vmcs_read16(GUEST_ES_SELECTOR) == 0 ? 0x10000 : 0xc093);
 	vmcs_write32(GUEST_FS_AR_BYTES,
 		vmcs_read16(GUEST_FS_SELECTOR) == 0 ? 0x10000 : 0xc093);
@@ -13392,7 +13395,7 @@ static void hypx86_init_vmcs_guest_state(void) {
 	vmcs_write32(GUEST_TR_AR_BYTES, 0x8b);
 
 
-		
+
 	/* following fields of GDTR and IDTR
 	 *	Base address (64 bits)
 	 *	Segment limit (32 bits)
@@ -13417,7 +13420,7 @@ static void hypx86_init_vmcs_guest_state(void) {
 	 * IA32_EFER (64 bits)
 	 * IA32_BNDCFGS (64 bits), didn't find this
 	 */
-	vmcs_write64(GUEST_IA32_DEBUGCTL, 0);	
+	vmcs_write64(GUEST_IA32_DEBUGCTL, 0);
 	rdmsr(MSR_IA32_SYSENTER_CS, low32, high32);
 	vmcs_write32(GUEST_SYSENTER_CS, low32);
 	rdmsrl(MSR_IA32_SYSENTER_EIP, tmpl);
@@ -13490,7 +13493,7 @@ static void hypx86_init_vmcs_guest_state(void) {
  *
  * we need some changes here.
  *
- * Learn from 
+ * Learn from
  *	tools/testing/selftests/kvm/lib/vmx.c
  *	arch/x86/kvm/vmx.c - vmx_set_constant_host_state
  *	arch/x86/kvm/vmx.c - vmx_save_host_state
@@ -13531,7 +13534,7 @@ static void hypx86_init_vmcs_host_state(void) {
 
 	/* Selector fields of CS, SS, DS, ES, FS, GS, and TR */
 	vmcs_write16(HOST_CS_SELECTOR, __KERNEL_CS);
-	
+
 	vmcs_write16(HOST_SS_SELECTOR, __KERNEL_DS);
 
 	vmcs_write16(HOST_DS_SELECTOR, 0); // not sure
@@ -13554,7 +13557,7 @@ static void hypx86_init_vmcs_host_state(void) {
 	vmcs_writel(HOST_TR_BASE,
 			(unsigned long)&get_cpu_entry_area(cpu)->tss.x86_tss);
 	vmcs_writel(HOST_GDTR_BASE, (unsigned long)gdt);
-	
+
 	store_idt(&dt);
 	vmcs_writel(HOST_IDTR_BASE, dt.address);
 
@@ -13565,7 +13568,7 @@ static void hypx86_init_vmcs_host_state(void) {
 	 * IA32_PAT (64 bits)
 	 * IA32_EFER (64 bits)
 	 *
-	 * maybe IA32_SYSENTER_ESP should be set later than this funciton. 
+	 * maybe IA32_SYSENTER_ESP should be set later than this funciton.
 	 */
 	rdmsr(MSR_IA32_SYSENTER_CS, low32, high32);
 	vmcs_write32(HOST_IA32_SYSENTER_CS, low32);
@@ -13581,7 +13584,7 @@ static void hypx86_init_vmcs_host_state(void) {
 static void hypx86_init_vmcs_control_fields(void) {
 	//u32 vmx_msr_low, vmx_msr_high;
 	u32 min = 0, opt = 0;
-	//u64 pin_based_vm_exec_control = 0;
+	u64 pin_based_vm_exec_control = 0;
     //u32 pin_based_high32 = 0;
 	u64 cpu_based_exec_control = 0;
 	//u32 cpu_based_2nd_exec_control = 0;
@@ -13601,14 +13604,15 @@ static void hypx86_init_vmcs_control_fields(void) {
 	min = PIN_BASED_EXT_INTR_MASK | PIN_BASED_NMI_EXITING;
 	opt = PIN_BASED_VIRTUAL_NMIS | PIN_BASED_POSTED_INTR |
 			PIN_BASED_VMX_PREEMPTION_TIMER;
-	vmcs_write32(PIN_BASED_VM_EXEC_CONTROL, get_control_field_value(0, 0, MSR_IA32_VMX_PINBASED_CTLS));
-    //rdmsrl(MSR_IA32_VMX_PINBASED_CTLS, pin_based_vm_exec_control);
-    //pin_based_vm_exec_control &= ~PIN_BASED_EXT_INTR_MASK;
-    //pin_based_vm_exec_control &= ~PIN_BASED_NMI_EXITING;
-    //pin_based_vm_exec_control &= ~PIN_BASED_VIRTUAL_NMIS;
-    //pin_based_vm_exec_control &= ~PIN_BASED_VMX_PREEMPTION_TIMER;
-    //pin_based_vm_exec_control &= ~PIN_BASED_POSTED_INTR;
-    //vmcs_write32(PIN_BASED_VM_EXEC_CONTROL, pin_based_vm_exec_control);
+	pin_based_vm_exec_control = get_control_field_value(0, 0, MSR_IA32_VMX_PINBASED_CTLS);
+	pr_info("pin_based_vm_ctl from rdmsr: %x\n", pin_based_vm_exec_control);
+	//vmcs_write32(PIN_BASED_VM_EXEC_CONTROL, get_control_field_value(0, 0, MSR_IA32_VMX_PINBASED_CTLS));
+    pin_based_vm_exec_control &= ~PIN_BASED_EXT_INTR_MASK;
+    pin_based_vm_exec_control &= ~PIN_BASED_NMI_EXITING;
+    pin_based_vm_exec_control &= ~PIN_BASED_VIRTUAL_NMIS;
+    pin_based_vm_exec_control &= ~PIN_BASED_VMX_PREEMPTION_TIMER;
+    pin_based_vm_exec_control &= ~PIN_BASED_POSTED_INTR;
+    vmcs_write32(PIN_BASED_VM_EXEC_CONTROL, pin_based_vm_exec_control);
 
 
     rdmsrl(MSR_IA32_VMX_PROCBASED_CTLS, cpu_based_exec_control);
@@ -13622,7 +13626,7 @@ static void hypx86_init_vmcs_control_fields(void) {
 	vmcs_writel(CR0_GUEST_HOST_MASK, 0);
 	vmcs_writel(CR4_GUEST_HOST_MASK, 0);
 	vmcs_writel(CR0_READ_SHADOW, get_cr0());
-	vmcs_writel(CR4_READ_SHADOW, get_cr4());	
+	vmcs_writel(CR4_READ_SHADOW, get_cr4());
 
 	/* VM-exit control fields (basic)
 	 *	1. VM-Exit Controls
@@ -13638,7 +13642,7 @@ static void hypx86_init_vmcs_control_fields(void) {
 	 *	1. VM-Entry Controls
 	 *	2. VM_ENTRY_MSR_LOAD_COUNT
 	 *	3. VM-Entry Controls for MSRs (VM-entry MSR-load count, address)
-	 *	4. VM-Entry Controls for Event Injection (VM-entry interruption-information field (32 bits)) 
+	 *	4. VM-Entry Controls for Event Injection (VM-entry interruption-information field (32 bits))
 	 */
 	min = VM_ENTRY_LOAD_DEBUG_CONTROLS;
 	opt = VM_ENTRY_LOAD_IA32_PAT | VM_ENTRY_LOAD_BNDCFGS;
