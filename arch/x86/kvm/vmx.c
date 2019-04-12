@@ -13301,6 +13301,7 @@ static void hypx86_init_vmcs_guest_state(void) {
 	int cpu = raw_smp_processor_id();
 	void *gdt = get_current_gdt_ro();
 	unsigned long sysenter_esp;
+	volatile u64 tmp_rip;
 
 
 
@@ -13322,6 +13323,9 @@ static void hypx86_init_vmcs_guest_state(void) {
 	/* TODO : RSP, RIP and RFLAGS */
 	//vmcs_writel(GUEST_RSP, ); // use original RSP, should be set right before vmlaunch?
 	vmcs_writel(GUEST_RIP, highvisor_return); // use address of next function after vmx_init (may be another function)
+
+	tmp_rip = vmcs_readl(GUEST_RIP);
+	pr_info("[HYP-DEBUG] GUEST_RIP : %llx\n", tmp_rip);
 	//vmcs_writel(GUEST_RFLAGS, ); // I think we can use the host rflags. we can only read it using asm code. look at my picture.
 
 
@@ -13602,8 +13606,8 @@ static void hypx86_init_vmcs_control_fields(void) {
 	min = PIN_BASED_EXT_INTR_MASK | PIN_BASED_NMI_EXITING;
 	opt = PIN_BASED_VIRTUAL_NMIS | PIN_BASED_POSTED_INTR |
 			PIN_BASED_VMX_PREEMPTION_TIMER;
-	pin_based_vm_exec_control = get_control_field_value(0, 0, MSR_IA32_VMX_PINBASED_CTLS);
-	pr_info("pin_based_vm_ctl from rdmsr: %x\n", pin_based_vm_exec_control);
+	pin_based_vm_exec_control = get_control_field_value(min, 0, MSR_IA32_VMX_PINBASED_CTLS);
+	pr_info("pin_based_vm_ctl from rdmsr: %llx\n", pin_based_vm_exec_control);
 	//vmcs_write32(PIN_BASED_VM_EXEC_CONTROL, get_control_field_value(0, 0, MSR_IA32_VMX_PINBASED_CTLS));
     pin_based_vm_exec_control &= ~PIN_BASED_EXT_INTR_MASK;
     pin_based_vm_exec_control &= ~PIN_BASED_NMI_EXITING;
