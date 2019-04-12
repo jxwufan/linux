@@ -125,7 +125,8 @@ static u32 get_control_field_value(u32 ctl_min, u32 ctl_opt, u32 msr) {
 	ctl |= vmx_msr_low;		/* bit == 1 in low word ==> must be one */
 
 	/* Ensure minimum (required) set of control bits are supported */
-	if (ctl & ~ctl_min) {
+	pr_info("[HYPX86-DEBUG] ctl : %x, ctl_min : %x\n", ctl, ctl_min);
+	if (ctl_min & ~ctl) {
 		pr_info("[HYPE-X86-BUG] control field setting went wrong"); 
 		return -1;
 	}
