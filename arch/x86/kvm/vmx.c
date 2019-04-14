@@ -13256,6 +13256,10 @@ void hypx86_switch_to_nonroot(void) {
 	volatile unsigned long exit_qualification;
   	asm(
 		__ex(ASM_VMX_VMWRITE_RSP_RDX) "\n\t"
+			: : "d"((unsigned long)HOST_RSP)
+		);
+  	asm(
+		__ex(ASM_VMX_VMWRITE_RSP_RDX) "\n\t"
 		__ex(ASM_VMX_VMLAUNCH) "\n\t"
 		"2: "
 		".pushsection .rodata \n\t"
