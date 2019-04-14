@@ -13253,6 +13253,7 @@ void hypx86_set_up_vmcs(void) {
 
 void hypx86_switch_to_nonroot(void) {
 	volatile int exit_reason;
+	volatile unsigned long exit_qualification;
   	asm(
 		__ex(ASM_VMX_VMWRITE_RSP_RDX) "\n\t"
 		__ex(ASM_VMX_VMLAUNCH) "\n\t"
@@ -13268,6 +13269,8 @@ void hypx86_switch_to_nonroot(void) {
 	pr_info("back in root! lowvisor\n");
 	exit_reason = vmcs_read32(VM_EXIT_REASON);
 	pr_info("vm exit reason: %x\n", exit_reason);
+	exit_qualification = vmcs_readl(EXIT_QUALIFICATION);
+	pr_info("vm qualification reason: %lx\n", exit_qualification);
   	asm(
 		"1: "
 		".pushsection .rodata \n\t"

@@ -1,5 +1,5 @@
 #include <asm/msr.h>
-#define LOW_VISOR_STACK_SIZE 128
+#define LOW_VISOR_STACK_SIZE 4096
 
 typedef unsigned short u16;
 
@@ -127,7 +127,7 @@ static u32 get_control_field_value(u32 ctl_min, u32 ctl_opt, u32 msr) {
 	/* Ensure minimum (required) set of control bits are supported */
 	pr_info("[HYPX86-DEBUG] ctl : %x, ctl_min : %x\n", ctl, ctl_min);
 	if (ctl_min & ~ctl) {
-		pr_info("[HYPE-X86-BUG] control field setting went wrong"); 
+		pr_info("[HYPE-X86-BUG] control field setting went wrong");
 		return -1;
 	}
 
