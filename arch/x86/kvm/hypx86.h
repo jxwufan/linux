@@ -114,6 +114,19 @@ static inline void set_cr4(u64 val)
 	__asm__ __volatile__("mov %0, %%cr4" : : "r" (val) : "memory");
 }
 
+static inline u64 get_rflags(void)
+{
+	u64 rflags;
+
+	__asm__ __volatile__("push %%rax \n\t"
+						 "pushf \n\t"
+						 "pop %%rax \n\t"
+						 "mov %%rax, %[rflags]\n\t"
+						 "pop %%rax \n\t"
+			: [rflags]"=r"(rflags)
+			: : "rax", "memory");
+	return rflags;
+}
 
 
 static u32 get_control_field_value(u32 ctl_min, u32 ctl_opt, u32 msr) {

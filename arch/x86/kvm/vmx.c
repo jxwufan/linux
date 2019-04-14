@@ -13333,8 +13333,8 @@ static void hypx86_init_vmcs_guest_state(void) {
 
 	tmp_rip = vmcs_readl(GUEST_RIP);
 	pr_info("[HYP-DEBUG] GUEST_RIP : %llx\n", tmp_rip);
-	//vmcs_writel(GUEST_RFLAGS, ); // I think we can use the host rflags. we can only read it using asm code. look at my picture.
-
+	vmcs_writel(GUEST_RFLAGS, get_rflags()); // I think we can use the host rflags. we can only read it using asm code. look at my picture.
+	pr_info("[HYP-DEBUG] RFLAGS : %lx\n", get_rflags());
 
 	/* following fields of CS, SS, DS, ES, FS, GS, LDTR, and TR
 	 *	selector (16 bits)
