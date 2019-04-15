@@ -13239,10 +13239,6 @@ void hypx86_set_up_vmcs(void) {
 
 	err = alloc_loaded_vmcs(&hypx86_vmcs);
 
-/* start to set up vmcs*/
-
-	/* first load vmcs */
-	loaded_vmcs_clear(&hypx86_vmcs);
 	vmcs_load(hypx86_vmcs.vmcs);
 	/* second config vmcs */
 
@@ -13301,196 +13297,67 @@ void hypx86_switch_to_nonroot(void) {
  * Learn from "tools/testing/selftests/kvm/lib/vmx.c"
  */
 static void hypx86_init_vmcs_guest_state(void) {
-	u32 low32, high32;
-	unsigned long tmpl;
-	struct desc_ptr dt;
 	unsigned long cr0, cr3, cr4;
-	int cpu = raw_smp_processor_id();
-	void *gdt = get_current_gdt_ro();
-	unsigned long sysenter_esp;
-	volatile u64 tmp_rip;
 
-
-
-
-	/* control registers */
 	cr0 = read_cr0();
 	WARN_ON(cr0 & X86_CR0_TS);
 	vmcs_writel(GUEST_CR0, cr0);
-
 	cr3 = __read_cr3();
 	vmcs_writel(GUEST_CR3, cr3);
-
 	cr4 = cr4_read_shadow();
 	vmcs_writel(GUEST_CR4, cr4);
-
-	/* TODO : Debug register : DR7 */
 	vmcs_writel(GUEST_DR7, 0x400);
+	vmcs_writel(GUEST_RIP, highvisor_return);
 
-	/* TODO : RSP, RIP and RFLAGS */
-	//vmcs_writel(GUEST_RSP, ); // use original RSP, should be set right before vmlaunch?
-	vmcs_writel(GUEST_RIP, highvisor_return); // use address of next function after vmx_init (may be another function)
+	vmcs_writel(CR0_GUEST_HOST_MASK, ~0UL);
+	vmcs_writel(CR4_GUEST_HOST_MASK, ~0UL);
+	vmcs_write32(GUEST_ACTIVITY_STATE, GUEST_ACTIVITY_ACTIVE);
 
-	tmp_rip = vmcs_readl(GUEST_RIP);
-	pr_info("[HYP-DEBUG] GUEST_RIP : %llx\n", tmp_rip);
-	//vmcs_writel(GUEST_RFLAGS, ); // I think we can use the host rflags. we can only read it using asm code. look at my picture.
-
-
-	/* following fields of CS, SS, DS, ES, FS, GS, LDTR, and TR
-	 *	selector (16 bits)
-	 *	Base address (64 bits)
-	 *	Segment limit (32 bits)
-	 *	Access rights (32 bits)
-	 */
-
-	/* selector */
-	vmcs_write16(GUEST_CS_SELECTOR, __KERNEL_CS);
-	vmcs_write16(GUEST_SS_SELECTOR, __KERNEL_DS);
-#ifndef CONFIG_X86_64
-	vmcs_write16(GUEST_DS_SELECTOR, get_ds());
-	vmcs_write16(GUEST_ES_SELECTOR, get_es());
-	vmcs_write16(GUEST_FS_SELECTOR, get_fs());
-	vmcs_write16(GUEST_GS_SELECTOR, get_gs());
-	vmcs_write16(GUEST_LDTR_SELECTOR, 0);	// not sure
-	vmcs_write16(GUEST_TR_SELECTOR, get_tr());
-#endif
-	/* base */
-	vmcs_writel(GUEST_CS_BASE, 0);
+	/* Guest segment bases. */
+	vmcs_writel(GUEST_ES_BASE, 0);
 	vmcs_writel(GUEST_SS_BASE, 0);
 	vmcs_writel(GUEST_DS_BASE, 0);
-	vmcs_writel(GUEST_ES_BASE, 0);
+	vmcs_writel(GUEST_FS_BASE, 0);
+	vmcs_writel(GUEST_GS_BASE, 0);
+	vmcs_writel(GUEST_CS_BASE, 0);
 
-	// two ways for GUEST_FS_BASE, GUEST_GS_BASE. not sure am I right.
-	/*
-	if (likely(is_64bit_mm(current->mm))) {
-		fs_base = current->thread.fsbase;
-		kernel_gs_base = current->thread.gsbase;
-		vmcs_writel(GUEST_FS_BASE, fs_base);
-		vmcs_writel(GUEST_GS_BASE, cpu_kernelmode_gs_base(cpu));
-		pr_info("[OUR-DEB-INFO-init_vmcs_guest_state] kernel_gs_base : %lu, cpu_kernelmode_gs_base : %lu\n", kernel_gs_base, cpu_kernelmode_gs_base(cpu));
-	}*/
-	rdmsrl(MSR_FS_BASE, tmpl);
-	vmcs_writel(GUEST_FS_BASE, tmpl);
-	rdmsrl(MSR_GS_BASE, tmpl);
-	vmcs_writel(GUEST_GS_BASE, tmpl);
+	/* Guest segment limits. */
+	vmcs_write32(GUEST_ES_LIMIT, ~0u);
+	vmcs_write32(GUEST_SS_LIMIT, ~0u);
+	vmcs_write32(GUEST_DS_LIMIT, ~0u);
+	vmcs_write32(GUEST_FS_LIMIT, ~0u);
+	vmcs_write32(GUEST_GS_LIMIT, ~0u);
+	vmcs_write32(GUEST_CS_LIMIT, ~0u);
 
-	vmcs_writel(GUEST_LDTR_BASE, 0);	// not sure. should read from host as well?
-	vmcs_writel(GUEST_TR_BASE,
-			(unsigned long)&get_cpu_entry_area(cpu)->tss.x86_tss);
-
-	/* segment limit : not so important? not sure at all*/
-	vmcs_write32(GUEST_CS_LIMIT, -1);
-	vmcs_write32(GUEST_SS_LIMIT, -1);
-	vmcs_write32(GUEST_DS_LIMIT, -1);
-	vmcs_write32(GUEST_ES_LIMIT, -1);
-	vmcs_write32(GUEST_FS_LIMIT, -1);
-	vmcs_write32(GUEST_GS_LIMIT, -1);
-	vmcs_write32(GUEST_LDTR_LIMIT, -1);
-	vmcs_write32(GUEST_TR_LIMIT, 0x67);
-
-	/* access rights, not sure */
-	// please see the intel manual table
-	vmcs_write32(GUEST_CS_AR_BYTES, 0xa09b);
+	/* Guest segment AR bytes. */
+	vmcs_write32(GUEST_ES_AR_BYTES, 0xc093); /* read/write, accessed */
 	vmcs_write32(GUEST_SS_AR_BYTES, 0xc093);
-	vmcs_write32(GUEST_DS_AR_BYTES,
-		vmcs_read16(GUEST_DS_SELECTOR) == 0 ? 0x10000 : 0xc093);
-	vmcs_write32(GUEST_ES_AR_BYTES,
-		vmcs_read16(GUEST_ES_SELECTOR) == 0 ? 0x10000 : 0xc093);
-	vmcs_write32(GUEST_FS_AR_BYTES,
-		vmcs_read16(GUEST_FS_SELECTOR) == 0 ? 0x10000 : 0xc093);
-	vmcs_write32(GUEST_GS_AR_BYTES,
-		vmcs_read16(GUEST_GS_SELECTOR) == 0 ? 0x10000 : 0xc093);
-	vmcs_write32(GUEST_LDTR_AR_BYTES, 0x10000);
-	vmcs_write32(GUEST_TR_AR_BYTES, 0x8b);
+	vmcs_write32(GUEST_DS_AR_BYTES, 0xc093);
+	vmcs_write32(GUEST_FS_AR_BYTES, 0xc093);
+	vmcs_write32(GUEST_GS_AR_BYTES, 0xc093);
+	vmcs_write32(GUEST_CS_AR_BYTES, 0xc09b); /* exec/read, accessed */
 
+	/* Guest IDT. */
+	vmcs_writel(GUEST_IDTR_BASE, 0);
+	vmcs_write32(GUEST_IDTR_LIMIT, 0);
 
+	/* Guest GDT. */
+	vmcs_writel(GUEST_GDTR_BASE, 0);
+	vmcs_write32(GUEST_GDTR_LIMIT, 0);
 
-	/* following fields of GDTR and IDTR
-	 *	Base address (64 bits)
-	 *	Segment limit (32 bits)
-	 */
+	/* Guest LDT. */
+	vmcs_write32(GUEST_LDTR_AR_BYTES, 0x0082); /* LDT */
+	vmcs_write16(GUEST_LDTR_SELECTOR, 0);
+	vmcs_writel(GUEST_LDTR_BASE, 0);
+	vmcs_write32(GUEST_LDTR_LIMIT, 0);
 
-	/* base address */
-	vmcs_writel(GUEST_GDTR_BASE, (unsigned long)gdt);
-	store_idt(&dt);
-	vmcs_writel(GUEST_IDTR_BASE, dt.address);
-
-	/* segment limit */
-	vmcs_write32(GUEST_GDTR_LIMIT, 0xffff); // not sure, likely(right)
-	vmcs_write32(GUEST_IDTR_LIMIT, 0xffff); // not sure, likely(right)
-
-
-	/* the following MSRs
-	 * IA32_DEBUGCTL (64 bits)
-	 * IA32_SYSENTER_CS (32 bits)
-	 * IA32_SYSENTER_ESP and IA32_SYSENTER_EIP (64 bits)
-	 * IA32_PERF_GLOBAL_CTRL (64 bits)
-	 * IA32_PAT (64 bits)
-	 * IA32_EFER (64 bits)
-	 * IA32_BNDCFGS (64 bits), didn't find this
-	 */
-	vmcs_write64(GUEST_IA32_DEBUGCTL, 0);
-	rdmsr(MSR_IA32_SYSENTER_CS, low32, high32);
-	vmcs_write32(GUEST_SYSENTER_CS, low32);
-	rdmsrl(MSR_IA32_SYSENTER_EIP, tmpl);
-	vmcs_writel(GUEST_SYSENTER_EIP, tmpl);
-	rdmsrl(MSR_IA32_SYSENTER_ESP, sysenter_esp);
-	vmcs_writel(GUEST_SYSENTER_ESP, sysenter_esp);
-
-	if (vmcs_config.vmexit_ctrl & VM_EXIT_LOAD_IA32_PERF_GLOBAL_CTRL) {
-		rdmsr(MSR_CORE_PERF_GLOBAL_CTRL, low32, high32);
-		vmcs_write64(GUEST_IA32_PERF_GLOBAL_CTRL, low32 | ((u64) high32 << 32));
-	}
-	if (vmcs_config.vmexit_ctrl & VM_EXIT_LOAD_IA32_PAT) {
-		rdmsr(MSR_IA32_CR_PAT, low32, high32);
-		vmcs_write64(GUEST_IA32_PAT, low32 | ((u64) high32 << 32));
-	}
-	if (vmcs_config.vmexit_ctrl & VM_EXIT_LOAD_IA32_EFER) {
-		rdmsr(MSR_EFER, low32, high32);
-		vmcs_write64(GUEST_IA32_EFER, low32 | ((u64) high32 << 32));
-	}
-	if (kvm_mpx_supported()) {
-	//if (boot_cpu_has(X86_FEATURE_MPX)) {
-	//	rdmsrl(MSR_IA32_BNDCFGS, tmpl);
-	//	vmcs_write64(GUEST_BNDCFGS, tmpl);
-		vmcs_write64(GUEST_BNDCFGS, 0);
-		// not sure
-	}
-
-
-	/* SMBASE register (32 bits) */
-
-
-	/* Guest Non-Register States, not sure
-	 *	1. Activity state (32 bits)
-	 *	2. Interruptibility state (32 bits)
-	 *	3. Pending debug exceptions (64 bits)
-	 *	4. VMCS link pointer (64 bits)
-	 *	5. VMX-preemption timer value (32 bits)
-	 *	6. Page-directory-pointer-table entries (PDPTEs; 64 bits each)
-	 *	7. Guest interrupt status (16 bits)
-	 *		a. Requesting virtual interrupt (RVI)
-	 *		b. Servicing virtual interrupt (SVI)
-	 *	8. PML index (16 bits)
-	 */
-	vmcs_write32(GUEST_ACTIVITY_STATE, 0);
+	/* Guest TSS. */
+	vmcs_write32(GUEST_TR_AR_BYTES, 0x008b); /* 32-bit TSS (busy) */
+	vmcs_writel(GUEST_TR_BASE, 0);
+	vmcs_write32(GUEST_TR_LIMIT, 0xff);
 	vmcs_write32(GUEST_INTERRUPTIBILITY_INFO, 0);
-	vmcs_writel(GUEST_PENDING_DBG_EXCEPTIONS, 0);
-	//vmcs_write64(VMCS_LINK_POINTER, 0xffffffffffffffff);
-	vmcs_write64(VMCS_LINK_POINTER, -1ll);
-		// we don't have shadow vmcs?
-	vmcs_write32(VMX_PREEMPTION_TIMER_VALUE, 0);
-	vmcs_write32(GUEST_PDPTR0, 0);
-	vmcs_write32(GUEST_PDPTR0_HIGH, 0);
-	vmcs_write32(GUEST_PDPTR1, 0);
-	vmcs_write32(GUEST_PDPTR1_HIGH, 0);
-	vmcs_write32(GUEST_PDPTR2, 0);
-	vmcs_write32(GUEST_PDPTR2_HIGH, 0);
-	vmcs_write32(GUEST_PDPTR3, 0);
-	vmcs_write32(GUEST_PDPTR3_HIGH, 0);
-		// if we enable EPT then we need to change PDPTR
-	vmcs_write16(GUEST_INTR_STATUS, 0);
-	vmcs_write16(GUEST_PML_INDEX, 0);
+	vmcs_writel(GUEST_DR7, 0);
+	vmcs_write64(VMCS_LINK_POINTER, ~0UL);
 }
 
 /*
@@ -13660,6 +13527,21 @@ static void hypx86_init_vmcs_control_fields(void) {
 	vmcs_write32(VM_ENTRY_INTR_INFO_FIELD, 0);
 
 	/* VM-exit information fields */
+}
+
+u16 hyp_vmcs_read16(unsigned long field)
+{
+	return __vmcs_readl(field);
+}
+
+u32 hyp_vmcs_read32(unsigned long field)
+{
+	return __vmcs_readl(field);
+}
+
+u64 hyp_vmcs_read64(unsigned long field)
+{
+	return __vmcs_readl(field);
 }
 
 module_init(vmx_init)
