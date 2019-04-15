@@ -13251,6 +13251,20 @@ void hypx86_set_up_vmcs(void) {
     hypx86_init_vmcs_control_fields();
 }
 
+void hypx86_print_debug(void) {
+	//unsigned long cr0, cr3, cr4;
+	//pr_info("[HYP-PRINT-DEBUG] GUEST_CR0 : %lx\n", vmcs_readl(GUEST_CR0));
+	//pr_info("[HYP-PRINT-DEBUG] GUEST_CR4 : %lx\n", vmcs_readl(GUEST_CR4));
+
+	//pr_info("[HYP-PRINT-DEBUG] VM_ENTRY_CONTROLS : %x\n", vmcs_read32(VM_ENTRY_CONTROLS));
+
+	// IA32_PERF_GLOBAL_CTRL MSR, IA32_PAT MSR, IA32_EFER MSR, IA32_BNDCFGS MSR
+	pr_info("[HYP-PRINT-DEBUG] IA32_PERF_GLOBAL_CTRL : %llx\n", vmcs_read64(GUEST_IA32_PERF_GLOBAL_CTRL));
+	pr_info("[HYP-PRINT-DEBUG] IA32_EFER : %llx\n", vmcs_read64(GUEST_IA32_EFER));	
+	pr_info("[HYP-PRINT-DEBUG] GUEST_IA32_PAT : %llx\n", vmcs_read64(GUEST_IA32_PAT));
+
+}
+
 void hypx86_switch_to_nonroot(void) {
 	volatile int exit_reason;
 	volatile unsigned long exit_qualification;
@@ -13258,6 +13272,7 @@ void hypx86_switch_to_nonroot(void) {
 		__ex(ASM_VMX_VMWRITE_RSP_RDX) "\n\t"
 			: : "d"((unsigned long)HOST_RSP)
 		);
+	dump_vmcs();
   	asm(
 		__ex(ASM_VMX_VMWRITE_RSP_RDX) "\n\t"
 		__ex(ASM_VMX_VMLAUNCH) "\n\t"
@@ -13309,9 +13324,6 @@ static void hypx86_init_vmcs_guest_state(void) {
 	void *gdt = get_current_gdt_ro();
 	unsigned long sysenter_esp;
 	volatile u64 tmp_rip;
-
-
-
 
 	/* control registers */
 	cr0 = read_cr0();
@@ -13400,7 +13412,8 @@ static void hypx86_init_vmcs_guest_state(void) {
 		vmcs_read16(GUEST_FS_SELECTOR) == 0 ? 0x10000 : 0xc093);
 	vmcs_write32(GUEST_GS_AR_BYTES,
 		vmcs_read16(GUEST_GS_SELECTOR) == 0 ? 0x10000 : 0xc093);
-	vmcs_write32(GUEST_LDTR_AR_BYTES, 0x10000);
+	//vmcs_write32(GUEST_LDTR_AR_BYTES, 0x10000);
+	vmcs_write32(GUEST_LDTR_AR_BYTES, 0x8082);
 	vmcs_write32(GUEST_TR_AR_BYTES, 0x8b);
 
 
@@ -13473,7 +13486,7 @@ static void hypx86_init_vmcs_guest_state(void) {
 	 *		b. Servicing virtual interrupt (SVI)
 	 *	8. PML index (16 bits)
 	 */
-	vmcs_write32(GUEST_ACTIVITY_STATE, 0);
+	vmcs_write32(GUEST_ACTIVITY_STATE, GUEST_ACTIVITY_ACTIVE);
 	vmcs_write32(GUEST_INTERRUPTIBILITY_INFO, 0);
 	vmcs_writel(GUEST_PENDING_DBG_EXCEPTIONS, 0);
 	//vmcs_write64(VMCS_LINK_POINTER, 0xffffffffffffffff);
@@ -13593,6 +13606,7 @@ static void hypx86_init_vmcs_host_state(void) {
 static void hypx86_init_vmcs_control_fields(void) {
 	//u32 vmx_msr_low, vmx_msr_high;
 	u32 min = 0, opt = 0;
+	//u32 tmp = 0;
 	u64 pin_based_vm_exec_control = 0;
     //u32 pin_based_high32 = 0;
 	u64 cpu_based_exec_control = 0;
@@ -13625,13 +13639,18 @@ static void hypx86_init_vmcs_control_fields(void) {
 
 
     rdmsrl(MSR_IA32_VMX_PROCBASED_CTLS, cpu_based_exec_control);
+	// try
+	//cpu_based_exec_control |= (1 << 31);
     vmcs_write32(CPU_BASED_VM_EXEC_CONTROL, cpu_based_exec_control);
 	vmcs_write32(EXCEPTION_BITMAP, 0);	// we can control page-fault here
 	vmcs_write32(PAGE_FAULT_ERROR_CODE_MASK, 0);
 	vmcs_write32(PAGE_FAULT_ERROR_CODE_MATCH, -1); /* never match, I don't know what is this */
 	vmcs_write32(CR3_TARGET_COUNT, 0);
 	vmcs_write32(TPR_THRESHOLD, 0);
+
+	//cpu_based_exec_control = 0x80; // Unrestricted guest
 	vmcs_write32(SECONDARY_VM_EXEC_CONTROL, 0);
+	//vmcs_write32(SECONDARY_VM_EXEC_CONTROL, cpu_based_exec_control);
 	vmcs_writel(CR0_GUEST_HOST_MASK, 0);
 	vmcs_writel(CR4_GUEST_HOST_MASK, 0);
 	vmcs_writel(CR0_READ_SHADOW, get_cr0());
@@ -13655,6 +13674,8 @@ static void hypx86_init_vmcs_control_fields(void) {
 	 */
 	min = VM_ENTRY_LOAD_DEBUG_CONTROLS;
 	opt = VM_ENTRY_LOAD_IA32_PAT | VM_ENTRY_LOAD_BNDCFGS;
+	//tmp = get_control_field_value(min, opt, MSR_IA32_VMX_ENTRY_CTLS);
+	//tmp &= 0xfffffeff;
 	vmcs_write32(VM_ENTRY_CONTROLS, get_control_field_value(min, opt, MSR_IA32_VMX_ENTRY_CTLS));
 	vmcs_write32(VM_ENTRY_MSR_LOAD_COUNT, 0);
 	vmcs_write32(VM_ENTRY_INTR_INFO_FIELD, 0);
