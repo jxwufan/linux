@@ -13276,7 +13276,9 @@ void hypx86_check_guest_state_field() {
 
 void hypx86_switch_to_nonroot(void) {
 	volatile int exit_reason;
+	volatile int vm_inst_error;
 	volatile unsigned long exit_qualification;
+	volatile bool always_true = true;
   	asm(
 		__ex(ASM_VMX_VMWRITE_RSP_RDX) "\n\t"
 			: : "d"((unsigned long)HOST_RSP)
@@ -13295,12 +13297,16 @@ void hypx86_switch_to_nonroot(void) {
 	      : "cc", "memory"
 	      );
 
-	pr_info("back in root! lowvisor\n");
+	pr_info("[HYP-DEBUG] back in root! lowvisor\n");
 	exit_reason = vmcs_read32(VM_EXIT_REASON);
-	pr_info("vm exit reason: %x\n", exit_reason);
+	pr_info("[HYP-DEBUG] vm exit reason: %x\n", exit_reason);
 	exit_qualification = vmcs_readl(EXIT_QUALIFICATION);
-	pr_info("vm qualification reason: %lx\n", exit_qualification);
-  	asm(
+	pr_info("[HYP-DEBUG] vm qualification reason: %lx\n", exit_qualification);
+	vm_inst_error = vmcs_read32(VM_INSTRUCTION_ERROR);
+	pr_info("[HYP-DEBUG] vm instruction error: %u\n", vm_inst_error);
+	if (always_true)
+		goto skip_nonroot;
+  	asm volatile(
 		"1: "
 		".pushsection .rodata \n\t"
 		".global highvisor_return \n\t"
@@ -13309,6 +13315,8 @@ void hypx86_switch_to_nonroot(void) {
 		);
 
 	pr_info("I am in non-root world! highvisor\n");
+
+skip_nonroot:
 	return;
 }
 
@@ -13355,8 +13363,9 @@ static void hypx86_init_vmcs_guest_state(void) {
 
 	tmp_rip = vmcs_readl(GUEST_RIP);
 	pr_info("[HYP-DEBUG] GUEST_RIP : %llx\n", tmp_rip);
-	vmcs_writel(GUEST_RFLAGS, get_rflags()); // I think we can use the host rflags. we can only read it using asm code. look at my picture.
-	pr_info("[HYP-DEBUG] RFLAGS : %llx\n", get_rflags());
+	// vmcs_writel(GUEST_RFLAGS, get_rflags()); // I think we can use the host rflags. we can only read it using asm code. look at my picture.
+	vmcs_writel(GUEST_RFLAGS, get_rflags());
+	pr_info("[HYP-DEBUG] RFLAGS : %lx\n", get_rflags());
 
 	/* following fields of CS, SS, DS, ES, FS, GS, LDTR, and TR
 	 *	selector (16 bits)
@@ -13500,7 +13509,7 @@ static void hypx86_init_vmcs_guest_state(void) {
 	vmcs_write32(GUEST_INTERRUPTIBILITY_INFO, 0);
 	vmcs_writel(GUEST_PENDING_DBG_EXCEPTIONS, 0);
 	//vmcs_write64(VMCS_LINK_POINTER, 0xffffffffffffffff);
-	vmcs_write64(VMCS_LINK_POINTER, -1ll);
+	vmcs_write64(VMCS_LINK_POINTER, -1ul);
 		// we don't have shadow vmcs?
 	vmcs_write32(VMX_PREEMPTION_TIMER_VALUE, 0);
 	vmcs_write32(GUEST_PDPTR0, 0);
