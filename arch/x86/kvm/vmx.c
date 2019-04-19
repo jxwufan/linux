@@ -13265,6 +13265,15 @@ void hypx86_print_debug(void) {
 
 }
 
+void hypx86_check_guest_part1() {
+
+}
+
+void hypx86_check_guest_state_field() {
+// 26.3.1 Checks on the Guest State Area		
+	//26.3.1.1 Checks on Guest Control Registers, Debug Registers, and MSRs
+}
+
 void hypx86_switch_to_nonroot(void) {
 	volatile int exit_reason;
 	volatile unsigned long exit_qualification;
@@ -13273,6 +13282,7 @@ void hypx86_switch_to_nonroot(void) {
 			: : "d"((unsigned long)HOST_RSP)
 		);
 	dump_vmcs();
+	hypx86_check_guest_state_field();
   	asm(
 		__ex(ASM_VMX_VMWRITE_RSP_RDX) "\n\t"
 		__ex(ASM_VMX_VMLAUNCH) "\n\t"
@@ -13346,7 +13356,7 @@ static void hypx86_init_vmcs_guest_state(void) {
 	tmp_rip = vmcs_readl(GUEST_RIP);
 	pr_info("[HYP-DEBUG] GUEST_RIP : %llx\n", tmp_rip);
 	vmcs_writel(GUEST_RFLAGS, get_rflags()); // I think we can use the host rflags. we can only read it using asm code. look at my picture.
-	pr_info("[HYP-DEBUG] RFLAGS : %lx\n", get_rflags());
+	pr_info("[HYP-DEBUG] RFLAGS : %llx\n", get_rflags());
 
 	/* following fields of CS, SS, DS, ES, FS, GS, LDTR, and TR
 	 *	selector (16 bits)
