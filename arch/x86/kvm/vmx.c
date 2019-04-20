@@ -13265,13 +13265,93 @@ void hypx86_print_debug(void) {
 
 }
 
-void hypx86_check_guest_part1() {
-
+int check_bit(unsigned long src_val, int bit, unsigned long tar_val) {
+	// src_val : the value to be checked
+	// bit : from 0 to 63.
+	// tar_val : bit shoule be 1 or 0
+	
+	if (((src_val >> bit) & 1) == tar_val)
+		return 1;
+	return 0;
 }
 
-void hypx86_check_guest_state_field() {
-// 26.3.1 Checks on the Guest State Area		
+unsigned long get_bit(unsigned long src_val, int bit) {
+	return (src_val >> bit) & 1;
+}
+
+
+void hypx86_check_guest_part1(void) {
 	//26.3.1.1 Checks on Guest Control Registers, Debug Registers, and MSRs
+	u64 cr0 = vmcs_readl(GUEST_CR0);
+	u64 cr3 = vmcs_readl(GUEST_CR3);
+	u64 cr4 = vmcs_readl(GUEST_CR4);
+	u64 dr7 = vmcs_readl(GUEST_DR7);
+	u64 tmp64;//tar64;
+	u32 vmentry_ctl;
+
+
+	pr_info("[OUR-VMCS-LOG] enter hypx86_check_guest_part1");
+
+	// TODO : The CR0 field must not set any bit to a value not supported in VMX operation (see Section 23.8).
+
+	if (get_bit(cr0, 31) == 1) {
+		tmp64 = cr0 & 1;
+		if (!check_bit(tmp64, 0, 1))
+			pr_info("[OUR-VMCS-ERROR] 1.1\n");
+	}
+
+	// TODO : The CR4 field must not set any bit to a value not supported in VMX operation (see Section 23.8).
+	
+	vmentry_ctl = vmcs_read32(VM_ENTRY_CONTROLS);
+	if (!check_bit(vmentry_ctl, 2, 1) || vmcs_read64(GUEST_IA32_DEBUGCTL) != 0)
+		//LOAD_DEBUG_CONTROLS is 2 bit
+		pr_info("[OUR-VMCS-ERROR] 1.2\n");
+
+	if (get_bit(vmentry_ctl, 9) == 1) {
+		// IA-32e mode guest 9 bit
+		if (!check_bit(cr0, 31, 1) || !check_bit(cr4, 5, 1))
+			pr_info("[OUR-VMCS-ERROR] 1.3\n");
+	} else {
+		if (check_bit(cr4, 17, 1))
+			pr_info("[OUR-VMCS-ERROR] 1.4\n");
+	}
+
+	if ((cr3 >> 32) != 0) {
+		pr_info("[OUR-VMCS-WARNING] 1.5\n");
+	}
+
+	if (check_bit(vmentry_ctl, 2, 1) && (dr7 >> 32) != 0) {
+		//Load debug control
+		pr_info("[OUR-VMCS-ERROR] 1.6\n");
+	}
+
+	pr_info("[OUR-VMCS-INFO-CANONICAL] GUEST_SYSENTER_ESP : %016lx, GUEST_SYSENTER_EIP : %016lx\n", vmcs_readl(GUEST_SYSENTER_ESP), vmcs_readl(GUEST_SYSENTER_EIP)); 
+
+	if (check_bit(vmentry_ctl, 13, 1)) {
+		//Load IA32_PERF_GLOB AL_CTRL, bit 12
+		pr_info("[OUR-VMCS-INFO-reserved-0] GUEST_IA32_PERF_GLOBAL_CTRL : %016llx\n", vmcs_read64(GUEST_IA32_PERF_GLOBAL_CTRL));
+	}
+
+	if (check_bit(vmentry_ctl, 14, 1)) {
+		//LOAD_IA32_PAT
+		pr_info("[OUR-VMCS-INFO-special-check] GUEST_IA32_PAT MSR : %016llx\n", vmcs_read64(GUEST_IA32_PAT));
+	}
+
+	if (check_bit(vmentry_ctl, 15, 1)) {
+		//load IA32_EFER
+		pr_info("[OUR-VMCS-INFO-special-check] GUEST_IA32_EFER MSR : %016llx\n", vmcs_read64(GUEST_IA32_EFER));
+	}
+
+	if (check_bit(vmentry_ctl, 16, 1)) {
+		//load IA32_BNDCFGS
+		pr_info("[OUR-VMCS-INFO-special-check] GUEST_IA32_BNDCFGS MSR : %016llx\n", vmcs_read64(GUEST_BNDCFGS));
+	}
+}
+
+void hypx86_check_guest_state_field(void) {
+// 26.3.1 Checks on the Guest State Area		
+	pr_info("[OUR-VMCS-LOG] enter hypx86_check_guest_state_field");
+	hypx86_check_guest_part1();
 }
 
 void hypx86_switch_to_nonroot(void) {
@@ -13365,7 +13445,7 @@ static void hypx86_init_vmcs_guest_state(void) {
 	pr_info("[HYP-DEBUG] GUEST_RIP : %llx\n", tmp_rip);
 	// vmcs_writel(GUEST_RFLAGS, get_rflags()); // I think we can use the host rflags. we can only read it using asm code. look at my picture.
 	vmcs_writel(GUEST_RFLAGS, get_rflags());
-	pr_info("[HYP-DEBUG] RFLAGS : %lx\n", get_rflags());
+	pr_info("[HYP-DEBUG] RFLAGS : %llx\n", get_rflags());
 
 	/* following fields of CS, SS, DS, ES, FS, GS, LDTR, and TR
 	 *	selector (16 bits)
