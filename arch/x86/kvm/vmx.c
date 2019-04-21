@@ -13269,10 +13269,18 @@ int check_bit(unsigned long src_val, int bit, unsigned long tar_val) {
 	// src_val : the value to be checked
 	// bit : from 0 to 63.
 	// tar_val : bit shoule be 1 or 0
-	
+
 	if (((src_val >> bit) & 1) == tar_val)
 		return 1;
 	return 0;
+}
+
+int check_bits(unsigned long src_val, int st, int ed, unsigned long tar_val) {
+	for ( ; st < ed; st++) {
+		if (!check_bit(src_val, st, tar_val))
+			return 0;
+	}
+	return 1;
 }
 
 unsigned long get_bit(unsigned long src_val, int bit) {
@@ -13301,7 +13309,7 @@ void hypx86_check_guest_part1(void) {
 	}
 
 	// TODO : The CR4 field must not set any bit to a value not supported in VMX operation (see Section 23.8).
-	
+
 	vmentry_ctl = vmcs_read32(VM_ENTRY_CONTROLS);
 	if (!check_bit(vmentry_ctl, 2, 1) || vmcs_read64(GUEST_IA32_DEBUGCTL) != 0)
 		//LOAD_DEBUG_CONTROLS is 2 bit
@@ -13348,10 +13356,456 @@ void hypx86_check_guest_part1(void) {
 	}
 }
 
+static inline bool hypx86_is_noncanonical_address(u64 la)
+{
+#ifdef CONFIG_X86_64
+	return get_canonical(la, 48) != la;
+#else
+	return false;
+#endif
+}
+
+void perr(int x, int y)
+{
+	pr_info("[OUR-VMCS-ERROR] %d.%d\n", x, y);
+}
+
+unsigned long get_type(unsigned long src_val) {
+	unsigned long ret_val = 0;
+	int st = 0;
+	int ed = 4;
+	for ( ; st < ed; st++) {
+		ret_val = (ret_val << 1) | get_bit(src_val, st);
+	}
+	return ret_val;
+}
+
+unsigned long get_DPL(unsigned long src_val) {
+	unsigned long ret_val = 0;
+	int st = 5;
+	int ed = 6;
+	for ( ; st < ed; st++) {
+		ret_val = (ret_val << 1) | get_bit(src_val, st);
+	}
+	return ret_val;
+}
+
+unsigned long get_RPL(unsigned long src_val) {
+	unsigned long ret_val = 0;
+	int st = 0;
+	int ed = 1;
+	for ( ; st < ed; st++) {
+		ret_val = (ret_val << 1) | get_bit(src_val, st);
+	}
+	return ret_val;
+}
+
+unsigned long get_reserved_0(unsigned long src_val) {
+	unsigned long ret_val = 0;
+	int st = 8;
+	int ed = 12;
+	for ( ; st < ed; st++) {
+		ret_val = (ret_val << 1) | get_bit(src_val, st);
+	}
+	return ret_val;
+}
+
+unsigned long get_reserved_1(unsigned long src_val) {
+	unsigned long ret_val = 0;
+	int st = 17;
+	int ed = 32;
+	for ( ; st < ed; st++) {
+		ret_val = (ret_val << 1) | get_bit(src_val, st);
+	}
+	return ret_val;
+}
+
+int hypx86_is_usable(unsigned long src) {
+	if (check_bit(src, 16, 0))
+		return 1;
+	else
+		return 0;
+}
+
+void hypx86_check_guest_part2(void) {
+	int cnt = 0, tmp_type, tmp_DPL;
+	int is_virtual_8086;
+
+	u64 cr0 = vmcs_readl(GUEST_CR0);
+	unsigned long LDTR_SELECTOR, TR_SELECTOR;
+	unsigned long CS_SELECTOR, SS_SELECTOR, DS_SELECTOR;
+	unsigned long ES_SELECTOR, FS_SELECTOR, GS_SELECTOR;
+	unsigned long CS_BASE, SS_BASE, DS_BASE, ES_BASE, FS_BASE, GS_BASE, TR_BASE, LDTR_BASE;
+	unsigned long CS_AR, SS_AR, DS_AR, ES_AR, FS_AR, GS_AR, LDTR_AR, TR_AR;
+	unsigned long CS_LIMIT, SS_LIMIT, DS_LIMIT, ES_LIMIT;
+	unsigned long FS_LIMIT, GS_LIMIT, LDTR_LIMIT, TR_LIMIT;
+	unsigned long RFLAGS;
+
+	RFLAGS = vmcs_readl(GUEST_RFLAGS);
+	TR_SELECTOR = vmcs_read16(GUEST_TR_SELECTOR);
+	LDTR_SELECTOR = vmcs_read16(GUEST_LDTR_SELECTOR);
+	CS_SELECTOR = vmcs_read16(GUEST_CS_SELECTOR);
+	SS_SELECTOR = vmcs_read16(GUEST_SS_SELECTOR);
+	DS_SELECTOR = vmcs_read16(GUEST_DS_SELECTOR);
+	ES_SELECTOR = vmcs_read16(GUEST_ES_SELECTOR);
+	FS_SELECTOR = vmcs_read16(GUEST_FS_SELECTOR);
+	GS_SELECTOR = vmcs_read16(GUEST_GS_SELECTOR);
+	TR_BASE = vmcs.readl(GUEST_TR_BASE);
+	LDTR_BASE = vmcs.readl(GUEST_LDTR_BASE);
+	CS_BASE = vmcs.readl(GUEST_CS_BASE);
+	SS_BASE = vmcs.readl(GUEST_SS_BASE);
+	DS_BASE = vmcs.readl(GUEST_DS_BASE);
+	ES_BASE = vmcs.readl(GUEST_ES_BASE);
+	FS_BASE = vmcs.readl(GUEST_FS_BASE);
+	GS_BASE = vmcs.readl(GUEST_GS_BASE);
+	TR_AR = vmcs.read32(GUEST_TR_AR_BYTES);
+	LDTR_AR = vmcs.read32(GUEST_LDTR_AR_BYTES);
+	CS_AR = vmcs.read32(GUEST_CS_AR_BYTES);
+	SS_AR = vmcs.read32(GUEST_SS_AR_BYTES);
+	DS_AR = vmcs.read32(GUEST_DS_AR_BYTES);
+	ES_AR = vmcs.read32(GUEST_ES_AR_BYTES);
+	FS_AR = vmcs.read32(GUEST_FS_AR_BYTES);
+	GS_AR = vmcs.read32(GUEST_GS_AR_BYTES);
+	TR_LIMIT = vmcs.read32(GUEST_TR_LIMIT);
+	LDTR_LIMIT = vmcs.read32(GUEST_LDTR_LIMIT);
+	CS_LIMIT = vmcs.read32(GUEST_CS_LIMIT);
+	SS_LIMIT = vmcs.read32(GUEST_SS_LIMIT);
+	DS_LIMIT = vmcs.read32(GUEST_DS_LIMIT);
+	ES_LIMIT = vmcs.read32(GUEST_ES_LIMIT);
+	FS_LIMIT = vmcs.read32(GUEST_FS_LIMIT);
+	GS_LIMIT = vmcs.read32(GUEST_GS_LIMIT);
+
+
+	// get some terms
+	is_virtual_8086 = check_bit(RFLAGS, 17, 1);
+
+	// selector fields
+	if (!check_bit(TR_SELECTOR, 2, 0)) {
+		perr(2, 1);
+	}
+	if (check_bit(LDTR_AR, 16, 0)) {
+		if (!check_bit(LDTR_SELECTOR, 2, 0)) {
+			perr(2, 2);
+		}
+	}
+	if (!is_virtual_8086) {
+		if (!(check_bit(SS_SELECTOR, 0, get_bit(CS_SELECTOR, 0)) &&
+		      check_bit(SS_SELECTOR, 1, get_bit(CS_SELECTOR, 1)))) {
+			perr(2, 3);
+		}
+	}
+
+	// Base-address fields
+	if (is_virtual_8086) {
+		if (CS_BASE != 16 * CS_SELECTOR ||
+		    DS_BASE != 16 * DS_SELECTOR ||
+		    SS_BASE != 16 * SS_SELECTOR ||
+		    ES_BASE != 16 * ES_SELECTOR ||
+		    FS_BASE != 16 * FS_SELECTOR ||
+		    GS_BASE != 16 * GS_SELECTOR) {
+			perr(2, 4);
+		}
+	}
+	if (hypx86_is_noncanonical_address(TR_BASE) ||
+	    hypx86_is_noncanonical_address(FS_BASE) ||
+	    hypx86_is_noncanonical_address(GS_BASE) ||
+	    (check_bit(LDTR_AR, 16, 0) && hypx86_is_noncanonical_address(LDTR_BASE)) ||
+	    !check_bits(CS_BASE, 32, 64, 0) ||
+	    (check_bit(SS_AR, 16, 0) && !check_bits(SS_BASE, 32, 64, 0)) ||
+	    (check_bit(DS_AR, 16, 0) && !check_bits(DS_BASE, 32, 64, 0)) ||
+	    (check_bit(ES_AR, 16, 0) && !check_bits(ES_BASE, 32, 64, 0))) {
+		perr(2, 5);
+	}
+	// TODO: Limit fields for CS, SS, DS, ES, FS, GS. If the guest will be virtual-8086, the field must be 0000FFFFH.
+	// Access-rights fields
+	// Access-rights fileds: CS, SS, DS, ES, FS, GS.
+	if (is_virtual_8086) {
+		pr_info("IT IS VIRTUAL 8086");
+	} else {
+		// Bits 3:0 (Type)
+		tmp_type = get_type(CS_AR);
+		if (tmp_type != 9 && tmp_type != 11 &&
+		    tmp_type != 13 && tmp_type != 15)
+			perr(2, 6);
+
+		if (check_bit(SS_AR, 16, 0)) {
+			tmp_type = get_type(SS_AR);
+			if (tmp_type != 3 && tmp_type != 7)
+				perr(2, 7);
+		}
+
+		if (!check_bit(DS_AR, 0, 1)) {
+			perr(2, 8);
+		}
+		if (check_bit(DS_AR, 3, 1) && !check_bit(DS_AR, 1, 1)) {
+			perr(2, 9);
+		}
+
+		if (!check_bit(ES_AR, 0, 1)) {
+			perr(2, 10);
+		}
+		if (check_bit(ES_AR, 3, 1) && !check_bit(ES_AR, 1, 1)) {
+			perr(2, 11);
+		}
+
+		if (!check_bit(FS_AR, 0, 1)) {
+			perr(2, 12);
+		}
+		if (check_bit(FS_AR, 3, 1) && !check_bit(FS_AR, 1, 1)) {
+			perr(2, 13);
+		}
+
+		if (!check_bit(GS_AR, 0, 1)) {
+			perr(2, 14);
+		}
+		if (check_bit(GS_AR, 3, 1) && !check_bit(GS_AR, 1, 1)) {
+			perr(2, 15);
+		}
+
+		// Bits 4 (S)
+		if (!check_bit(CS_AR, 4, 1)) {
+			perr(2, 16);
+		}
+		if (hypx86_is_usable(SS_AR) && !check_bit(SS_AR, 4, 1)) {
+			perr(2, 17);
+		}
+		if (hypx86_is_usable(DS_AR) && !check_bit(DS_AR, 4, 1)) {
+			perr(2, 18);
+		}
+		if (hypx86_is_usable(ES_AR) && !check_bit(ES_AR, 4, 1)) {
+			perr(2, 19);
+		}
+		if (hypx86_is_usable(FS_AR) && !check_bit(FS_AR, 4, 1)) {
+			perr(2, 20);
+		}
+		if (hypx86_is_usable(GS_AR) && !check_bit(GS_AR, 4, 1)) {
+			perr(2, 21);
+		}
+
+		// Bits 6:5 (DPL)
+		if (get_type(CS_AR) == 3 && get_DPL(CS_AR) != 0) {
+			perr(2, 22);
+		}
+		if (get_type(CS_AR) == 9 || get_type(CS_AR) == 11) {
+			if (get_DPL(CS_AR) != get_DPL(SS_AR)) {
+				perr(2, 23);
+			}
+		}
+		if (get_type(CS_AR) == 13 || get_type(CS_AR) == 15) {
+			if (get_DPL(CS_AR) > get_DPL(SS_AR)) {
+				perr(2, 24);
+			}
+		}
+
+		if (get_DPL(SS_AR) != get_RPL(SS_SELECTOR)) {
+			perr(2, 25);
+		}
+		if (get_type(CS_AR) == 3 || get_bit(cr0, 0) == 0) {
+			if (get_DPL(SS_AR) != 0) {
+				perr(2, 26);
+			}
+		}
+
+		if (hypx86_is_usable(DS_AR) && get_type(DS_AR) >= 0 &&
+		    get_type(DS_AR) <= 11) {
+			if (get_DPL(DS_AR) < get_RPL(DS_SELECTOR)) {
+				perr(2, 27);
+			}
+		}
+		if (hypx86_is_usable(ES_AR) && get_type(ES_AR) >= 0 &&
+		    get_type(ES_AR) <= 11) {
+			if (get_DPL(ES_AR) < get_RPL(ES_SELECTOR)) {
+				perr(2, 28);
+			}
+		}
+		if (hypx86_is_usable(FS_AR) && get_type(FS_AR) >= 0 &&
+		    get_type(FS_AR) <= 11) {
+			if (get_DPL(FS_AR) < get_RPL(FS_SELECTOR)) {
+				perr(2, 29);
+			}
+		}
+		if (hypx86_is_usable(GS_AR) && get_type(GS_AR) >= 0 &&
+		    get_type(GS_AR) <= 11) {
+			if (get_DPL(GS_AR) < get_RPL(GS_SELECTOR)) {
+				perr(2, 30);
+			}
+		}
+
+		// Bits 7 (P)
+		if (!check_bit(CS_AR, 7, 1)) {
+			perr(2, 31);
+		}
+		if (hypx86_is_usable(SS_AR) && !check_bit(SS_AR, 7, 1)) {
+			perr(2, 32);
+		}
+		if (hypx86_is_usable(DS_AR) && !check_bit(DS_AR, 7, 1)) {
+			perr(2, 33);
+		}
+		if (hypx86_is_usable(ES_AR) && !check_bit(ES_AR, 7, 1)) {
+			perr(2, 34);
+		}
+		if (hypx86_is_usable(FS_AR) && !check_bit(FS_AR, 7, 1)) {
+			perr(2, 35);
+		}
+		if (hypx86_is_usable(GS_AR) && !check_bit(GS_AR, 7, 1)) {
+			perr(2, 36);
+		}
+
+		// Bits 11:8 (reserved)
+		if (get_reserved_0(CS_AR)) {
+			perr(2, 37);
+		}
+		if (hypx86_is_usable(SS_AR) && get_reserved_0(SS_AR)) {
+			perr(2, 38);
+		}
+		if (hypx86_is_usable(DS_AR) && get_reserved_0(DS_AR)) {
+			perr(2, 39);
+		}
+		if (hypx86_is_usable(ES_AR) && get_reserved_0(ES_AR)) {
+			perr(2, 40);
+		}
+		if (hypx86_is_usable(FS_AR) && get_reserved_0(FS_AR)) {
+			perr(2, 41);
+		}
+		if (hypx86_is_usable(GS_AR) && get_reserved_0(GS_AR)) {
+			perr(2, 42);
+		}
+
+		// TODO: Bits 14 (D/B)
+
+		// Bit 15 (G):
+		if (!check_bits(CS_LIMIT, 0, 12, 1) && !check_bit(CS_AR, 15, 0)) {
+			perr(2, 43);
+		}
+		if (!check_bits(CS_LIMIT, 20, 32, 0) && !check_bit(CS_AR, 15, 1)) {
+			perr(2, 44);
+		}
+		if (hypx86_is_usable(SS_AR)) {
+			if (!check_bits(SS_LIMIT, 0, 12, 1) &&
+			    !check_bit(SS_AR, 15, 0)) {
+				perr(2, 45);
+			}
+			if (!check_bits(SS_LIMIT, 20, 32, 0) &&
+			    !check_bit(SS_AR, 15, 1)) {
+				perr(2, 46);
+			}
+		}
+		if (hypx86_is_usable(DS_AR)) {
+			if (!check_bits(DS_LIMIT, 0, 12, 1) &&
+			    !check_bit(DS_AR, 15, 0)) {
+				perr(2, 47);
+			}
+			if (!check_bits(DS_LIMIT, 20, 32, 0) &&
+			    !check_bit(DS_AR, 15, 1)) {
+				perr(2, 48);
+			}
+		}
+		if (hypx86_is_usable(ES_AR)) {
+			if (!check_bits(ES_LIMIT, 0, 12, 1) &&
+			    !check_bit(ES_AR, 15, 0)) {
+				perr(2, 49);
+			}
+			if (!check_bits(ES_LIMIT, 20, 32, 0) &&
+			    !check_bit(ES_AR, 15, 1)) {
+				perr(2, 50);
+			}
+		}
+		if (hypx86_is_usable(FS_AR)) {
+			if (!check_bits(FS_LIMIT, 0, 12, 1) &&
+			    !check_bit(FS_AR, 15, 0)) {
+				perr(2, 51);
+			}
+			if (!check_bits(FS_LIMIT, 20, 32, 0) &&
+			    !check_bit(FS_AR, 15, 1)) {
+				perr(2, 52);
+			}
+		}
+		if (hypx86_is_usable(GS_AR)) {
+			if (!check_bits(GS_LIMIT, 0, 12, 1) &&
+			    !check_bit(GS_AR, 15, 0)) {
+				perr(2, 53);
+			}
+			if (!check_bits(GS_LIMIT, 20, 32, 0) &&
+			    !check_bit(GS_AR, 15, 1)) {
+				perr(2, 54);
+			}
+		}
+
+		// Bits 31:17 (reserved)
+		if (get_reserved_1(CS_AR)) {
+			perr(2, 55);
+		}
+		if (hypx86_is_usable(SS_AR) && get_reserved_1(SS_AR)) {
+			perr(2, 56);
+		}
+		if (hypx86_is_usable(DS_AR) && get_reserved_1(DS_AR)) {
+			perr(2, 57);
+		}
+		if (hypx86_is_usable(ES_AR) && get_reserved_1(ES_AR)) {
+			perr(2, 58);
+		}
+		if (hypx86_is_usable(FS_AR) && get_reserved_1(FS_AR)) {
+			perr(2, 59);
+		}
+		if (hypx86_is_usable(GS_AR) && get_reserved_1(GS_AR)) {
+			perr(2, 60);
+		}
+	}
+
+	// Access-rights fileds: TR
+	// TODO: Bits 3:0 (Type).
+	if (!check_bit(TR_AR, 4, 0)) {
+		perr(2, 61);
+	}
+	if (!check_bit(TR_AR, 7, 1)) {
+		perr(2, 62);
+	}
+	if (get_reserved_0(TR_AR)) {
+		perr(2, 63);
+	}
+	if (!check_bits(TR_LIMIT, 0, 12, 1) &&
+	    !check_bit(TR_AR, 15, 0)) {
+		perr(2, 64);
+	}
+	if (!check_bits(TR_LIMIT, 20, 32, 0) &&
+	    !check_bit(TR_AR, 15, 1)) {
+		perr(2, 65);
+	}
+	if (!check_bit(TR_AR, 16, 0)) {
+		perr(2, 66);
+	}
+	if (get_reserved_1(TR_AR)) {
+		perr(2, 67);
+	}
+
+	// Access-rights fields: LDTR
+	if (get_type(LDTR_AR) != 2) {
+		perr(2, 68);
+	}
+	if (!check_bit(LDTR_AR, 4, 0)) {
+		perr(2, 69);
+	}
+	if (!check_bit(LDTR_AR, 7, 1)) {
+		perr(2, 70);
+	}
+	if (!check_bits(LDTR_LIMIT, 0, 12, 1) &&
+	    !check_bit(LDTR_AR, 15, 0)) {
+		perr(2, 71);
+	}
+	if (!check_bits(LDTR_LIMIT, 20, 32, 0) &&
+	    !check_bit(LDTR_AR, 15, 1)) {
+		perr(2, 72);
+	}
+	if (get_reserved_1(LDTR_AR)) {
+		perr(2, 73);
+	}
+}
+
 void hypx86_check_guest_state_field(void) {
 // 26.3.1 Checks on the Guest State Area		
 	pr_info("[OUR-VMCS-LOG] enter hypx86_check_guest_state_field");
 	hypx86_check_guest_part1();
+	hypx86_check_guest_part2();
 }
 
 void hypx86_switch_to_nonroot(void) {
@@ -13752,7 +14206,7 @@ static void hypx86_init_vmcs_control_fields(void) {
 	//vmcs_write32(SECONDARY_VM_EXEC_CONTROL, cpu_based_exec_control);
 	vmcs_writel(CR0_GUEST_HOST_MASK, 0);
 	vmcs_writel(CR4_GUEST_HOST_MASK, 0);
-	vmcs_writel(CR0_READ_SHADOW, get_cr0());
+	vmcs_writel(CR0_READ_SHADOW, get_cr0());j
 	vmcs_writel(CR4_READ_SHADOW, get_cr4());
 
 	/* VM-exit control fields (basic)
