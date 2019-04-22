@@ -13597,9 +13597,9 @@ void perr(int x, int y)
 
 unsigned long get_type(unsigned long src_val) {
 	unsigned long ret_val = 0;
-	int st = 0;
-	int ed = 4;
-	for ( ; st < ed; st++) {
+	int st = 3;
+	int ed = 0;
+	for ( ; st >= ed; st--) {
 		ret_val = (ret_val << 1) | get_bit(src_val, st);
 	}
 	return ret_val;
@@ -13607,9 +13607,9 @@ unsigned long get_type(unsigned long src_val) {
 
 unsigned long get_DPL(unsigned long src_val) {
 	unsigned long ret_val = 0;
-	int st = 5;
-	int ed = 6;
-	for ( ; st < ed; st++) {
+	int st = 6;
+	int ed = 5;
+	for ( ; st >= ed; st--) {
 		ret_val = (ret_val << 1) | get_bit(src_val, st);
 	}
 	return ret_val;
@@ -13617,9 +13617,9 @@ unsigned long get_DPL(unsigned long src_val) {
 
 unsigned long get_RPL(unsigned long src_val) {
 	unsigned long ret_val = 0;
-	int st = 0;
-	int ed = 1;
-	for ( ; st < ed; st++) {
+	int st = 1;
+	int ed = 0;
+	for ( ; st >= ed; st--) {
 		ret_val = (ret_val << 1) | get_bit(src_val, st);
 	}
 	return ret_val;
