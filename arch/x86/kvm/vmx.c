@@ -13762,38 +13762,46 @@ void hypx86_check_guest_part2(void) {
 		    tmp_type != 13 && tmp_type != 15)
 			perr(2, 6);
 
-		if (check_bit(SS_AR, 16, 0)) {
+		if (hypx86_is_usable(SS_AR)) {
 			tmp_type = get_type(SS_AR);
 			if (tmp_type != 3 && tmp_type != 7)
 				perr(2, 7);
 		}
 
-		if (!check_bit(DS_AR, 0, 1)) {
-			perr(2, 8);
-		}
-		if (check_bit(DS_AR, 3, 1) && !check_bit(DS_AR, 1, 1)) {
-			perr(2, 9);
-		}
-
-		if (!check_bit(ES_AR, 0, 1)) {
-			perr(2, 10);
-		}
-		if (check_bit(ES_AR, 3, 1) && !check_bit(ES_AR, 1, 1)) {
-			perr(2, 11);
+		if (hypx86_is_usable(DS_AR)) {
+			if (!check_bit(DS_AR, 0, 1)) {
+				perr(2, 8);
+			}
+			if (check_bit(DS_AR, 3, 1) && !check_bit(DS_AR, 1, 1)) {
+				perr(2, 9);
+			}
 		}
 
-		if (!check_bit(FS_AR, 0, 1)) {
-			perr(2, 12);
-		}
-		if (check_bit(FS_AR, 3, 1) && !check_bit(FS_AR, 1, 1)) {
-			perr(2, 13);
+		if (hypx86_is_usable(ES_AR)) {
+			if (!check_bit(ES_AR, 0, 1)) {
+				perr(2, 10);
+			}
+			if (check_bit(ES_AR, 3, 1) && !check_bit(ES_AR, 1, 1)) {
+				perr(2, 11);
+			}
 		}
 
-		if (!check_bit(GS_AR, 0, 1)) {
-			perr(2, 14);
+		if (hypx86_is_usable(FS_AR)) {
+			if (!check_bit(FS_AR, 0, 1)) {
+				perr(2, 12);
+			}
+			if (check_bit(FS_AR, 3, 1) && !check_bit(FS_AR, 1, 1)) {
+				perr(2, 13);
+			}
 		}
-		if (check_bit(GS_AR, 3, 1) && !check_bit(GS_AR, 1, 1)) {
-			perr(2, 15);
+
+		if (hypx86_is_usable(GS_AR)) {
+			if (!check_bit(GS_AR, 0, 1)) {
+				perr(2, 14);
+			}
+			if (check_bit(GS_AR, 3, 1) && !check_bit(GS_AR, 1, 1)) {
+				perr(2, 15);
+			}
 		}
 
 		// Bits 4 (S)
@@ -14013,25 +14021,27 @@ void hypx86_check_guest_part2(void) {
 	}
 
 	// Access-rights fields: LDTR
-	if (get_type(LDTR_AR) != 2) {
-		perr(2, 68);
-	}
-	if (!check_bit(LDTR_AR, 4, 0)) {
-		perr(2, 69);
-	}
-	if (!check_bit(LDTR_AR, 7, 1)) {
-		perr(2, 70);
-	}
-	if (!check_bits(LDTR_LIMIT, 0, 12, 1) &&
-	    !check_bit(LDTR_AR, 15, 0)) {
-		perr(2, 71);
-	}
-	if (!check_bits(LDTR_LIMIT, 20, 32, 0) &&
-	    !check_bit(LDTR_AR, 15, 1)) {
-		perr(2, 72);
-	}
-	if (get_reserved_1(LDTR_AR)) {
-		perr(2, 73);
+	if (hypx86_is_usable(LDTR_AR)) {
+		if (get_type(LDTR_AR) != 2) {
+			perr(2, 68);
+		}
+		if (!check_bit(LDTR_AR, 4, 0)) {
+			perr(2, 69);
+		}
+		if (!check_bit(LDTR_AR, 7, 1)) {
+			perr(2, 70);
+		}
+		if (!check_bits(LDTR_LIMIT, 0, 12, 1) &&
+		    !check_bit(LDTR_AR, 15, 0)) {
+			perr(2, 71);
+		}
+		if (!check_bits(LDTR_LIMIT, 20, 32, 0) &&
+		    !check_bit(LDTR_AR, 15, 1)) {
+			perr(2, 72);
+		}
+		if (get_reserved_1(LDTR_AR)) {
+			perr(2, 73);
+		}
 	}
 }
 
