@@ -13300,7 +13300,7 @@ void hypx86_check_guest_part1(void) {
 	u64 cr4 = vmcs_readl(GUEST_CR4);
 	u64 dr7 = vmcs_readl(GUEST_DR7);
 	u64 tmp64;//tar64;
-	u32 vmentry_ctl;
+	u32 vmentry_ctl = vmcs_read32(VM_ENTRY_CONTROLS);
 
 
 	pr_info("[OUR-VMCS-LOG] enter hypx86_check_guest_part1");
@@ -13315,7 +13315,6 @@ void hypx86_check_guest_part1(void) {
 
 	// TODO : The CR4 field must not set any bit to a value not supported in VMX operation (see Section 23.8).
 
-	vmentry_ctl = vmcs_read32(VM_ENTRY_CONTROLS);
 	if (!check_bit(vmentry_ctl, 2, 1) || vmcs_read64(GUEST_IA32_DEBUGCTL) != 0)
 		//LOAD_DEBUG_CONTROLS is 2 bit
 		pr_info("[OUR-VMCS-ERROR] 1.2\n");
@@ -13652,8 +13651,18 @@ int hypx86_is_usable(unsigned long src) {
 		return 0;
 }
 
+void hypx86_check_guest_part6(void) {
+	u64 cr0 = vmcs_readl(GUEST_CR0);
+	u64 cr4 = vmcs_readl(GUEST_CR4);
+	u32 vmentry_ctl = vmcs_read32(VM_ENTRY_CONTROLS);
+	
+	if (check_bit(cr0, 31, 1) && check_bit(cr4, 5, 1) && check_bit(vmentry_ctl, 9, 0)) {
+		pr_info("[OUR-VMCS-WARNING] 6.1 : plz make a check on sth (go to look it up in intel manual)\n");
+	}
+}
+
 void hypx86_check_guest_part2(void) {
-	int cnt = 0, tmp_type, tmp_DPL;
+	int tmp_type;//cnt = 0, tmp_DPL;
 	int is_virtual_8086;
 
 	u64 cr0 = vmcs_readl(GUEST_CR0);
@@ -13675,30 +13684,30 @@ void hypx86_check_guest_part2(void) {
 	ES_SELECTOR = vmcs_read16(GUEST_ES_SELECTOR);
 	FS_SELECTOR = vmcs_read16(GUEST_FS_SELECTOR);
 	GS_SELECTOR = vmcs_read16(GUEST_GS_SELECTOR);
-	TR_BASE = vmcs.readl(GUEST_TR_BASE);
-	LDTR_BASE = vmcs.readl(GUEST_LDTR_BASE);
-	CS_BASE = vmcs.readl(GUEST_CS_BASE);
-	SS_BASE = vmcs.readl(GUEST_SS_BASE);
-	DS_BASE = vmcs.readl(GUEST_DS_BASE);
-	ES_BASE = vmcs.readl(GUEST_ES_BASE);
-	FS_BASE = vmcs.readl(GUEST_FS_BASE);
-	GS_BASE = vmcs.readl(GUEST_GS_BASE);
-	TR_AR = vmcs.read32(GUEST_TR_AR_BYTES);
-	LDTR_AR = vmcs.read32(GUEST_LDTR_AR_BYTES);
-	CS_AR = vmcs.read32(GUEST_CS_AR_BYTES);
-	SS_AR = vmcs.read32(GUEST_SS_AR_BYTES);
-	DS_AR = vmcs.read32(GUEST_DS_AR_BYTES);
-	ES_AR = vmcs.read32(GUEST_ES_AR_BYTES);
-	FS_AR = vmcs.read32(GUEST_FS_AR_BYTES);
-	GS_AR = vmcs.read32(GUEST_GS_AR_BYTES);
-	TR_LIMIT = vmcs.read32(GUEST_TR_LIMIT);
-	LDTR_LIMIT = vmcs.read32(GUEST_LDTR_LIMIT);
-	CS_LIMIT = vmcs.read32(GUEST_CS_LIMIT);
-	SS_LIMIT = vmcs.read32(GUEST_SS_LIMIT);
-	DS_LIMIT = vmcs.read32(GUEST_DS_LIMIT);
-	ES_LIMIT = vmcs.read32(GUEST_ES_LIMIT);
-	FS_LIMIT = vmcs.read32(GUEST_FS_LIMIT);
-	GS_LIMIT = vmcs.read32(GUEST_GS_LIMIT);
+	TR_BASE = vmcs_readl(GUEST_TR_BASE);
+	LDTR_BASE = vmcs_readl(GUEST_LDTR_BASE);
+	CS_BASE = vmcs_readl(GUEST_CS_BASE);
+	SS_BASE = vmcs_readl(GUEST_SS_BASE);
+	DS_BASE = vmcs_readl(GUEST_DS_BASE);
+	ES_BASE = vmcs_readl(GUEST_ES_BASE);
+	FS_BASE = vmcs_readl(GUEST_FS_BASE);
+	GS_BASE = vmcs_readl(GUEST_GS_BASE);
+	TR_AR = vmcs_read32(GUEST_TR_AR_BYTES);
+	LDTR_AR = vmcs_read32(GUEST_LDTR_AR_BYTES);
+	CS_AR = vmcs_read32(GUEST_CS_AR_BYTES);
+	SS_AR = vmcs_read32(GUEST_SS_AR_BYTES);
+	DS_AR = vmcs_read32(GUEST_DS_AR_BYTES);
+	ES_AR = vmcs_read32(GUEST_ES_AR_BYTES);
+	FS_AR = vmcs_read32(GUEST_FS_AR_BYTES);
+	GS_AR = vmcs_read32(GUEST_GS_AR_BYTES);
+	TR_LIMIT = vmcs_read32(GUEST_TR_LIMIT);
+	LDTR_LIMIT = vmcs_read32(GUEST_LDTR_LIMIT);
+	CS_LIMIT = vmcs_read32(GUEST_CS_LIMIT);
+	SS_LIMIT = vmcs_read32(GUEST_SS_LIMIT);
+	DS_LIMIT = vmcs_read32(GUEST_DS_LIMIT);
+	ES_LIMIT = vmcs_read32(GUEST_ES_LIMIT);
+	FS_LIMIT = vmcs_read32(GUEST_FS_LIMIT);
+	GS_LIMIT = vmcs_read32(GUEST_GS_LIMIT);
 
 
 	// get some terms
@@ -14034,6 +14043,7 @@ void hypx86_check_guest_state_field(void) {
 	hypx86_check_guest_part3();
 	hypx86_check_guest_part4();
 	hypx86_check_guest_part5();
+	hypx86_check_guest_part6();
 }
 
 void hypx86_switch_to_nonroot(void) {
@@ -14435,7 +14445,7 @@ static void hypx86_init_vmcs_control_fields(void) {
 	//vmcs_write32(SECONDARY_VM_EXEC_CONTROL, cpu_based_exec_control);
 	vmcs_writel(CR0_GUEST_HOST_MASK, 0);
 	vmcs_writel(CR4_GUEST_HOST_MASK, 0);
-	vmcs_writel(CR0_READ_SHADOW, get_cr0());j
+	vmcs_writel(CR0_READ_SHADOW, get_cr0());
 	vmcs_writel(CR4_READ_SHADOW, get_cr4());
 
 	/* VM-exit control fields (basic)
@@ -14457,7 +14467,8 @@ static void hypx86_init_vmcs_control_fields(void) {
 	min = VM_ENTRY_LOAD_DEBUG_CONTROLS;
 	opt = VM_ENTRY_LOAD_IA32_PAT | VM_ENTRY_LOAD_BNDCFGS;
 	// it looks like we must open IA-32e mode guest
-	vmcs_write32(VM_ENTRY_CONTROLS, 0x200 | get_control_field_value(min, opt, MSR_IA32_VMX_ENTRY_CTLS));
+	//vmcs_write32(VM_ENTRY_CONTROLS, 0x200 | get_control_field_value(min, opt, MSR_IA32_VMX_ENTRY_CTLS));
+	vmcs_write32(VM_ENTRY_CONTROLS, get_control_field_value(min, opt, MSR_IA32_VMX_ENTRY_CTLS));
 	vmcs_write32(VM_ENTRY_MSR_LOAD_COUNT, 0);
 	vmcs_write32(VM_ENTRY_INTR_INFO_FIELD, 0);
 
