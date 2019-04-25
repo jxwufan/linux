@@ -1,13 +1,13 @@
 void hypx86_set_up_vmcs(void) {
 	int err;
 
-	err = alloc_loaded_vmcs(&hypx86_vmcs);
+	err = alloc_loaded_vmcs(&kernel_vmx.vmcs01);
 
-/* start to set up vmcs*/
+	/* start to set up vmcs */
 
 	/* first load vmcs */
-	loaded_vmcs_clear(&hypx86_vmcs);
-	vmcs_load(hypx86_vmcs.vmcs);
+	loaded_vmcs_clear(&kernel_vmx.vmcs01);
+	vmcs_load(kernel_vmx.vmcs01.vmcs);
 	/* second config vmcs */
 
     hypx86_init_vmcs_host_state();
@@ -1252,4 +1252,29 @@ void hypx86_init_vmcs_control_fields(void) {
 	vmcs_write32(VM_ENTRY_INTR_INFO_FIELD, 0);
 
 	/* VM-exit information fields */
+}
+
+/* handlers jump table */
+int (*const hyp_exit_handlers[])(struct kvm_vcpu *vcpu) = {
+	[] = ,
+	[] = ,
+	[EXIT_REASON_CPUID] = hyp_handle_cpuid,
+};
+
+
+
+int hyp_handle_cpuid(struct kvm_vcpu *vcpu)
+{
+	u32 eax, ebx, ecx, edx;
+	u64 rip;
+
+	eax = hyp_register_read(vcpu, VCPU_REGS_RAX);
+	ecx = hyp_register_read(vcpu, VCPU_REGS_RCX);
+	native_cpuid(&eax, &ebx, &ecx, &edx);
+	kvm_register_write(vcpu, VCPU_REGS_RAX, eax);
+	kvm_register_write(vcpu, VCPU_REGS_RBX, ebx);
+	kvm_register_write(vcpu, VCPU_REGS_RCX, ecx);
+	kvm_register_write(vcpu, VCPU_REGS_RDX, edx);
+
+	return hyp_skip_emulated_instruction(vcpu);
 }
