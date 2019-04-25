@@ -12,9 +12,9 @@ extern const unsigned long highvisor_return;
 
 
 void hypx86_set_up_vmcs(void);
-static void hypx86_init_vmcs_guest_state(void);
-static void hypx86_init_vmcs_host_state(void);
-static void hypx86_init_vmcs_control_fields(void);
+void hypx86_init_vmcs_guest_state(void);
+void hypx86_init_vmcs_host_state(void);
+void hypx86_init_vmcs_control_fields(void);
 void hypx86_switch_to_nonroot(void);
 
 /* learn from tools/testing/selftests/kvm/include/x86.h */
