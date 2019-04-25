@@ -14410,7 +14410,7 @@ static void hypx86_init_vmcs_control_fields(void) {
 	u32 min = 0, opt = 0;
 	//u32 tmp = 0;
 	u64 pin_based_vm_exec_control = 0;
-    //u32 pin_based_high32 = 0;
+	//u32 pin_based_high32 = 0;
 	u64 cpu_based_exec_control = 0;
 	//u32 cpu_based_2nd_exec_control = 0;
 	//u32 _vmexit_control = 0;
@@ -14432,18 +14432,18 @@ static void hypx86_init_vmcs_control_fields(void) {
 	pin_based_vm_exec_control = get_control_field_value(min, 0, MSR_IA32_VMX_PINBASED_CTLS);
 	pr_info("pin_based_vm_ctl from rdmsr: %llx\n", pin_based_vm_exec_control);
 	//vmcs_write32(PIN_BASED_VM_EXEC_CONTROL, get_control_field_value(0, 0, MSR_IA32_VMX_PINBASED_CTLS));
-    pin_based_vm_exec_control &= ~PIN_BASED_EXT_INTR_MASK;
-    pin_based_vm_exec_control &= ~PIN_BASED_NMI_EXITING;
-    pin_based_vm_exec_control &= ~PIN_BASED_VIRTUAL_NMIS;
-    pin_based_vm_exec_control &= ~PIN_BASED_VMX_PREEMPTION_TIMER;
-    pin_based_vm_exec_control &= ~PIN_BASED_POSTED_INTR;
-    vmcs_write32(PIN_BASED_VM_EXEC_CONTROL, pin_based_vm_exec_control);
+	pin_based_vm_exec_control &= ~PIN_BASED_EXT_INTR_MASK;
+	pin_based_vm_exec_control &= ~PIN_BASED_NMI_EXITING;
+	pin_based_vm_exec_control &= ~PIN_BASED_VIRTUAL_NMIS;
+	pin_based_vm_exec_control &= ~PIN_BASED_VMX_PREEMPTION_TIMER;
+	pin_based_vm_exec_control &= ~PIN_BASED_POSTED_INTR;
+	vmcs_write32(PIN_BASED_VM_EXEC_CONTROL, pin_based_vm_exec_control);
 
 
-    rdmsrl(MSR_IA32_VMX_PROCBASED_CTLS, cpu_based_exec_control);
+	rdmsrl(MSR_IA32_VMX_PROCBASED_CTLS, cpu_based_exec_control);
 	// try
 	//cpu_based_exec_control |= (1 << 31);
-    vmcs_write32(CPU_BASED_VM_EXEC_CONTROL, cpu_based_exec_control);
+	vmcs_write32(CPU_BASED_VM_EXEC_CONTROL, cpu_based_exec_control);
 	vmcs_write32(EXCEPTION_BITMAP, 0);	// we can control page-fault here
 	vmcs_write32(PAGE_FAULT_ERROR_CODE_MASK, 0);
 	vmcs_write32(PAGE_FAULT_ERROR_CODE_MATCH, -1); /* never match, I don't know what is this */
