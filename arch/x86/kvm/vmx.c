@@ -14061,12 +14061,13 @@ void hypx86_switch_to_nonroot(void) {
 	volatile int vm_inst_error;
 	volatile unsigned long exit_qualification;
 	volatile bool always_true = true;
+
   	asm(
 		__ex(ASM_VMX_VMWRITE_RSP_RDX) "\n\t"
 			: : "d"((unsigned long)HOST_RSP)
 		);
-	hypx86_check_guest_state_field();
 	dump_vmcs();
+	hypx86_check_guest_state_field();
   	asm(
 		__ex(ASM_VMX_VMWRITE_RSP_RDX) "\n\t"
 		__ex(ASM_VMX_VMLAUNCH) "\n\t"
@@ -14096,6 +14097,7 @@ void hypx86_switch_to_nonroot(void) {
 		".popsection"
 		);
 
+	printk("[NON-ROOT-printk] I am in non-root world! highvisor\n");
 	pr_info("I am in non-root world! highvisor\n");
 
 skip_nonroot:
@@ -14440,10 +14442,10 @@ static void hypx86_init_vmcs_control_fields(void) {
 	vmcs_write32(PIN_BASED_VM_EXEC_CONTROL, pin_based_vm_exec_control);
 
 
-	rdmsrl(MSR_IA32_VMX_PROCBASED_CTLS, cpu_based_exec_control);
-	// try
-	//cpu_based_exec_control |= (1 << 31);
-	vmcs_write32(CPU_BASED_VM_EXEC_CONTROL, cpu_based_exec_control);
+  rdmsrl(MSR_IA32_VMX_PROCBASED_CTLS, cpu_based_exec_control);
+	// bit 28 use MSR bitmaps
+	cpu_based_exec_control |= (1 << 28);
+  vmcs_write32(CPU_BASED_VM_EXEC_CONTROL, cpu_based_exec_control);
 	vmcs_write32(EXCEPTION_BITMAP, 0);	// we can control page-fault here
 	vmcs_write32(PAGE_FAULT_ERROR_CODE_MASK, 0);
 	vmcs_write32(PAGE_FAULT_ERROR_CODE_MATCH, -1); /* never match, I don't know what is this */
@@ -14477,8 +14479,8 @@ static void hypx86_init_vmcs_control_fields(void) {
 	min = VM_ENTRY_LOAD_DEBUG_CONTROLS;
 	opt = VM_ENTRY_LOAD_IA32_PAT | VM_ENTRY_LOAD_BNDCFGS;
 	// it looks like we must open IA-32e mode guest
-	//vmcs_write32(VM_ENTRY_CONTROLS, 0x200 | get_control_field_value(min, opt, MSR_IA32_VMX_ENTRY_CTLS));
-	vmcs_write32(VM_ENTRY_CONTROLS, get_control_field_value(min, opt, MSR_IA32_VMX_ENTRY_CTLS));
+	vmcs_write32(VM_ENTRY_CONTROLS, 0x200 | get_control_field_value(min, opt, MSR_IA32_VMX_ENTRY_CTLS));
+	//vmcs_write32(VM_ENTRY_CONTROLS, get_control_field_value(min, opt, MSR_IA32_VMX_ENTRY_CTLS));
 	vmcs_write32(VM_ENTRY_MSR_LOAD_COUNT, 0);
 	vmcs_write32(VM_ENTRY_INTR_INFO_FIELD, 0);
 
