@@ -9,7 +9,8 @@ typedef unsigned short u16;
 typedef unsigned char u8;
 typedef unsigned int u32;
 
-unsigned long low_visor_stack[LOW_VISOR_STACK_SIZE];
+unsigned long lowvisor_stack[LOW_VISOR_STACK_SIZE];
+unsigned long lowvisor_stack_end;
 struct vcpu_vmx kernel_vmx; // stores vcpu, vmcs blabla
 unsigned long initial_kernel_rsp;
 

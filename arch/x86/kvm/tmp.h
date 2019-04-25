@@ -1154,7 +1154,7 @@ void hypx86_init_vmcs_host_state(void) {
 
 
 	/* RSP, RIP*/
-	vmcs_writel(HOST_RSP, (u64)&low_visor_stack[LOW_VISOR_STACK_SIZE]);
+	vmcs_writel(HOST_RSP, (u64)&lowvisor_stack[LOW_VISOR_STACK_SIZE]);
 	vmcs_writel(HOST_RIP, hypx86_return);
 
 
@@ -1311,6 +1311,9 @@ int (*const hyp_exit_handlers[])(struct kvm_vcpu *vcpu) = {
 };
 
 void run_hyp_kernel(void) {
+
+/* brutally change stack , TODO: should reserve space for local vars */
+asm volatile("mov %0, %%" _ASM_SP " \n\t": : "c"(lowvisor_stack_end));
 	volatile int exit_reason;
 	volatile int vm_inst_error;
 	volatile unsigned long exit_qualification;
@@ -1322,6 +1325,8 @@ resume_kernel:
 
 
 	kernel_vmx.__launched = kernel_vmx.vmcs01.launched;
+
+
 
 	pr_info("[HYP-DEBUG] launch into nonroot kernel\n");
 	asm(
