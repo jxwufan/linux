@@ -11,47 +11,18 @@ typedef unsigned int u32;
 
 unsigned long low_visor_stack[LOW_VISOR_STACK_SIZE];
 struct vcpu_vmx kernel_vmx; // stores vcpu, vmcs blabla
+unsigned long initial_kernel_rsp;
 
 extern const unsigned long hypx86_return; // TODO: we need a to add a label called hypx86_return like "vm_return" in assembly code as the entrance of our ilowvisor handler.
 extern const unsigned long highvisor_return;
+
 
 void hypx86_set_up_vmcs(void);
 void hypx86_init_vmcs_guest_state(void);
 void hypx86_init_vmcs_host_state(void);
 void hypx86_init_vmcs_control_fields(void);
 void hypx86_switch_to_nonroot(void);
-
-static inline unsigned long hyp_register_read(struct kvm_vcpu *vcpu,
-											  enum kvm_reg reg)
-{
-	//if (!test_bit(reg, (unsigned long *)&vcpu->arch.regs_avail))
-		//kvm_x86_ops->cache_reg(vcpu, reg);
-
-	return vcpu->arch.regs[reg];
-}
-
-static inline void hyp_register_write(struct kvm_vcpu *vcpu,
-									  enum kvm_reg reg,
-									  unsigned long val)
-{
-	vcpu->arch.regs[reg] = val;
-	// these two lines may be useless for our simple implementation
-	_set_bit(reg, (unsigned long *)&vcpu->arch.regs_dirty);
-	_set_bit(reg, (unsigned long *)&vcpu->arch.regs_avail);
-}
-
-int hyp_skip_emulated_instruction(struct kvm_vcpu *vcpu)
-{
-	//unsigned long rflags = kvm_x86_ops->get_rflags(vcpu);
-	int r = EMULATE_DONE;
-	u64 rip;
-
-	rip = hyp_register_read(vcpu, VCPU_REGS_RIP);
-	rip += vmcs_read32(VM_EXIT_INSTRUCTION_LEN);
-	hyp_register_write(vcpu, VCPU_REGS_RIP, rip);
-
-	return r == EMULATE_DONE;
-}
+void run_hyp_kernel(void);
 
 
 /* learn from tools/testing/selftests/kvm/include/x86.h */
