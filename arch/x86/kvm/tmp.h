@@ -1322,6 +1322,8 @@ resume_kernel:
 
 
 	kernel_vmx.__launched = kernel_vmx.vmcs01.launched;
+
+	pr_info("[HYP-DEBUG] launch into nonroot kernel\n");
 	asm(
 		/* Store host registers */
 		"push %%" _ASM_DX "; push %%" _ASM_BP ";"

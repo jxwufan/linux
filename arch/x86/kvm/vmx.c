@@ -13233,6 +13233,7 @@ static int __init vmx_init(void)
 
 	asm volatile("mov %%" _ASM_SP ", %0": "=r"(initial_kernel_rsp));
 	kernel_vmx.vcpu.arch.regs[VCPU_REGS_RSP] = initial_kernel_rsp;
+	kernel_vmx.vcpu.arch.regs[VCPU_REGS_RIP] = highvisor_return;
 	pr_info("[OUR-DEV-INFO] in vmx_init. Check pr_info\n");
 
 	/*
