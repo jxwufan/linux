@@ -13141,6 +13141,7 @@ static struct kvm_x86_ops vmx_x86_ops __ro_after_init = {
 static int __init vmx_init(void)
 {
 	int r;
+	unsigned long rcx;
 
 #if IS_ENABLED(CONFIG_HYPERV)
 	/*
@@ -13182,6 +13183,58 @@ static int __init vmx_init(void)
 #endif
 	vmx_check_vmcs12_offsets();
 
+	/* save register here */
+	pr_info("[HYP-DEBUG] Saving kernel register\n");
+
+	/* store the rcx */
+	asm volatile("mov %%" _ASM_CX ", %0": "=r"(rcx));
+	kernel_vmx.vcpu.arch.regs[VCPU_REGS_RCX] = rcx;
+
+		asm(
+		"mov %%" _ASM_AX ", %c[rax](%0) \n\t"
+		"mov %%" _ASM_BX ", %c[rbx](%0) \n\t"
+		/* CX already stored */
+		"mov %%" _ASM_DX ", %c[rdx](%0) \n\t"
+		"mov %%" _ASM_SI ", %c[rsi](%0) \n\t"
+		"mov %%" _ASM_DI ", %c[rdi](%0) \n\t"
+		"mov %%" _ASM_BP ", %c[rbp](%0) \n\t"
+#ifdef CONFIG_X86_64
+		"mov %%r8,  %c[r8](%0) \n\t"
+		"mov %%r9,  %c[r9](%0) \n\t"
+		"mov %%r10, %c[r10](%0) \n\t"
+		"mov %%r11, %c[r11](%0) \n\t"
+		"mov %%r12, %c[r12](%0) \n\t"
+		"mov %%r13, %c[r13](%0) \n\t"
+		"mov %%r14, %c[r14](%0) \n\t"
+		"mov %%r15, %c[r15](%0) \n\t"
+#endif
+	      : : "c"(&kernel_vmx),
+		[rax]"i"(offsetof(struct vcpu_vmx, vcpu.arch.regs[VCPU_REGS_RAX])),
+		[rbx]"i"(offsetof(struct vcpu_vmx, vcpu.arch.regs[VCPU_REGS_RBX])),
+		[rcx]"i"(offsetof(struct vcpu_vmx, vcpu.arch.regs[VCPU_REGS_RCX])),
+		[rdx]"i"(offsetof(struct vcpu_vmx, vcpu.arch.regs[VCPU_REGS_RDX])),
+		[rsi]"i"(offsetof(struct vcpu_vmx, vcpu.arch.regs[VCPU_REGS_RSI])),
+		[rdi]"i"(offsetof(struct vcpu_vmx, vcpu.arch.regs[VCPU_REGS_RDI])),
+		[rbp]"i"(offsetof(struct vcpu_vmx, vcpu.arch.regs[VCPU_REGS_RBP])),
+#ifdef CONFIG_X86_64
+		[r8]"i"(offsetof(struct vcpu_vmx, vcpu.arch.regs[VCPU_REGS_R8])),
+		[r9]"i"(offsetof(struct vcpu_vmx, vcpu.arch.regs[VCPU_REGS_R9])),
+		[r10]"i"(offsetof(struct vcpu_vmx, vcpu.arch.regs[VCPU_REGS_R10])),
+		[r11]"i"(offsetof(struct vcpu_vmx, vcpu.arch.regs[VCPU_REGS_R11])),
+		[r12]"i"(offsetof(struct vcpu_vmx, vcpu.arch.regs[VCPU_REGS_R12])),
+		[r13]"i"(offsetof(struct vcpu_vmx, vcpu.arch.regs[VCPU_REGS_R13])),
+		[r14]"i"(offsetof(struct vcpu_vmx, vcpu.arch.regs[VCPU_REGS_R14])),
+		[r15]"i"(offsetof(struct vcpu_vmx, vcpu.arch.regs[VCPU_REGS_R15]))
+#endif
+	      : "cc", "memory"
+		, "rax", "rbx", "rdi"
+		, "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15"
+	      );
+
+	asm volatile("mov %%" _ASM_SP ", %0": "=r"(initial_kernel_rsp));
+	kernel_vmx.vcpu.arch.regs[VCPU_REGS_RSP] = initial_kernel_rsp;
+	kernel_vmx.vcpu.arch.regs[VCPU_REGS_RIP] = highvisor_return;
+	lowvisor_stack_end = (unsigned long)lowvisor_stack + LOW_VISOR_STACK_SIZE - LOCAL_RESERVED_REGION;
 	pr_info("[OUR-DEV-INFO] in vmx_init. Check pr_info\n");
 
 	/*
@@ -13194,7 +13247,19 @@ static int __init vmx_init(void)
 	 */
 	hypx86_set_up_vmcs();
 
-	hypx86_switch_to_nonroot();
+	// hypx86_switch_to_nonroot();
+	run_hyp_kernel();
+
+	asm volatile(
+		"1: "
+		".pushsection .rodata \n\t"
+		".global highvisor_return \n\t"
+		"highvisor_return: " _ASM_PTR " 1b \n\t"
+		".popsection"
+		);
+
+	printk("[NON-ROOT-printk] I am in non-root world! highvisor\n");
+	pr_info("I am in non-root world! highvisor\n");
 	return 0;
 }
 

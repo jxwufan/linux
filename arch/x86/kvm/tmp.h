@@ -1,3 +1,36 @@
+static inline unsigned long hyp_register_read(struct kvm_vcpu *vcpu,
+					      enum kvm_reg reg)
+{
+	//if (!test_bit(reg, (unsigned long *)&vcpu->arch.regs_avail))
+	//kvm_x86_ops->cache_reg(vcpu, reg);
+
+	return vcpu->arch.regs[reg];
+}
+
+static inline void hyp_register_write(struct kvm_vcpu *vcpu,
+				      enum kvm_reg reg,
+				      unsigned long val)
+{
+	vcpu->arch.regs[reg] = val;
+	// these two lines may be useless for our simple implementation
+	__set_bit(reg, (unsigned long *)&vcpu->arch.regs_dirty);
+	__set_bit(reg, (unsigned long *)&vcpu->arch.regs_avail);
+}
+
+int hyp_skip_emulated_instruction(struct kvm_vcpu *vcpu)
+{
+	//unsigned long rflags = kvm_x86_ops->get_rflags(vcpu);
+	int r = EMULATE_DONE;
+	u64 rip;
+
+	rip = hyp_register_read(vcpu, VCPU_REGS_RIP);
+	rip += vmcs_read32(VM_EXIT_INSTRUCTION_LEN);
+	hyp_register_write(vcpu, VCPU_REGS_RIP, rip);
+
+	return r == EMULATE_DONE;
+}
+
+
 void hypx86_set_up_vmcs(void) {
 	int err;
 
@@ -10,9 +43,9 @@ void hypx86_set_up_vmcs(void) {
 	vmcs_load(kernel_vmx.vmcs01.vmcs);
 	/* second config vmcs */
 
-    hypx86_init_vmcs_host_state();
-    hypx86_init_vmcs_guest_state();
-    hypx86_init_vmcs_control_fields();
+	hypx86_init_vmcs_host_state();
+	hypx86_init_vmcs_guest_state();
+	hypx86_init_vmcs_control_fields();
 }
 
 void hypx86_print_debug(void) {
@@ -24,7 +57,7 @@ void hypx86_print_debug(void) {
 
 	// IA32_PERF_GLOBAL_CTRL MSR, IA32_PAT MSR, IA32_EFER MSR, IA32_BNDCFGS MSR
 	pr_info("[HYP-PRINT-DEBUG] IA32_PERF_GLOBAL_CTRL : %llx\n", vmcs_read64(GUEST_IA32_PERF_GLOBAL_CTRL));
-	pr_info("[HYP-PRINT-DEBUG] IA32_EFER : %llx\n", vmcs_read64(GUEST_IA32_EFER));	
+	pr_info("[HYP-PRINT-DEBUG] IA32_EFER : %llx\n", vmcs_read64(GUEST_IA32_EFER));
 	pr_info("[HYP-PRINT-DEBUG] GUEST_IA32_PAT : %llx\n", vmcs_read64(GUEST_IA32_PAT));
 
 }
@@ -102,7 +135,7 @@ void hypx86_check_guest_part1(void) {
 	}
 
 	if (!hypx86_is_canonical_address(vmcs_readl(GUEST_SYSENTER_ESP)) || !hypx86_is_canonical_address(vmcs_readl(GUEST_SYSENTER_EIP))) {
-	pr_info("[OUR-VMCS-ERROR-CANONICAL] 1.7 : GUEST_SYSENTER_ESP : %016lx, GUEST_SYSENTER_EIP : %016lx\n", vmcs_readl(GUEST_SYSENTER_ESP), vmcs_readl(GUEST_SYSENTER_EIP)); 
+		pr_info("[OUR-VMCS-ERROR-CANONICAL] 1.7 : GUEST_SYSENTER_ESP : %016lx, GUEST_SYSENTER_EIP : %016lx\n", vmcs_readl(GUEST_SYSENTER_ESP), vmcs_readl(GUEST_SYSENTER_EIP));
 	}
 
 	if (check_bit(vmentry_ctl, 13, 1)) {
@@ -138,7 +171,7 @@ void hypx86_check_guest_part3(void) {
 	u32 idtr_limit = vmcs_read32(GUEST_IDTR_LIMIT);
 
 	if (!hypx86_is_canonical_address(gdtr_base) ||
-			!hypx86_is_canonical_address(idtr_base)) {
+	    !hypx86_is_canonical_address(idtr_base)) {
 		pr_info("[OUR-VMCS-ERROR] 3.1\n");
 	}
 
@@ -151,7 +184,7 @@ void hypx86_check_guest_part4(void) {
 	// 26.3.1.4 Checks on Guest RIP and RFLAGS
 	// RIP, RFLAGS
 	u64 rip = vmcs_readl(GUEST_RIP);
-	u64 rflags = vmcs_readl(GUEST_RFLAGS);	
+	u64 rflags = vmcs_readl(GUEST_RFLAGS);
 	u64 cr0 = vmcs_readl(GUEST_CR0);
 	u32 vmentry_ctl = vmcs_read32(VM_ENTRY_CONTROLS);
 	u32 cs_ar = vmcs_read32(GUEST_CS_AR_BYTES);
@@ -189,7 +222,7 @@ void hypx86_check_guest_part5(void) {
 	//26.3.1.5 Checks on Guest Non-Register State
 	//
 	u32 activity_state = vmcs_read32(GUEST_ACTIVITY_STATE);
-	u32 ss_ar = vmcs_read32(GUEST_SS_AR_BYTES);	
+	u32 ss_ar = vmcs_read32(GUEST_SS_AR_BYTES);
 	u32 interruptibility = vmcs_read32(GUEST_INTERRUPTIBILITY_INFO);
 	u32 vm_entry_intr_info = vmcs_read32(VM_ENTRY_INTR_INFO_FIELD);
 	u32 vm_entry_ctrl = vmcs_read32(VM_ENTRY_CONTROLS);
@@ -198,12 +231,12 @@ void hypx86_check_guest_part5(void) {
 	u64 pending_debug_except = vmcs_readl(GUEST_PENDING_DBG_EXCEPTIONS);
 	u64 ia32_debug_ctl = vmcs_read64(GUEST_IA32_DEBUGCTL);
 	u64 vmcs_link_pointer = vmcs_read64(VMCS_LINK_POINTER);
-	
+
 	pr_info("[OUR-VMCS-LOG] enter hypx86_check_guest_part5");
 
 	// Activity state.
 	if (activity_state >= 4) {
-		pr_info("[OUR-VMCS-ERROR] 5.1\n"); 
+		pr_info("[OUR-VMCS-ERROR] 5.1\n");
 	}
 
 	if ((ss_ar >> 5) & 0x3) {
@@ -246,15 +279,15 @@ void hypx86_check_guest_part5(void) {
 		}
 	}
 
-	if (check_bit(vm_entry_intr_info, 31, 1) && 
-		((vm_entry_intr_info >> 8) & 0x7) == 0) {
+	if (check_bit(vm_entry_intr_info, 31, 1) &&
+	    ((vm_entry_intr_info >> 8) & 0x7) == 0) {
 		if (check_bit(interruptibility, 0, 1) || check_bit(interruptibility, 1, 1)) {
 			pr_info("[OUR-VMCS-ERROR] 5.9\n");
 		}
 	}
 
-	if (check_bit(vm_entry_intr_info, 31, 1) && 
-		((vm_entry_intr_info >> 8) & 0x7) == 2) {
+	if (check_bit(vm_entry_intr_info, 31, 1) &&
+	    ((vm_entry_intr_info >> 8) & 0x7) == 2) {
 		if (check_bit(interruptibility, 1, 1)) {
 			pr_info("[OUR-VMCS-ERROR] 5.10\n");
 		}
@@ -273,17 +306,17 @@ void hypx86_check_guest_part5(void) {
 		}
 	}
 
-	if (check_bit(vm_entry_intr_info, 31, 1) && 
-		((vm_entry_intr_info >> 8) & 0x7) == 2) {
+	if (check_bit(vm_entry_intr_info, 31, 1) &&
+	    ((vm_entry_intr_info >> 8) & 0x7) == 2) {
 		if (check_bit(interruptibility, 0, 1)) {
 			pr_info("[OUR-VMCS-WARNING] 5.13\n");
 		}
 	}
 
-	
-	if (check_bit(vm_entry_intr_info, 31, 1) && 
-		((vm_entry_intr_info >> 8) & 0x7) == 2 &&
-		(check_bit(pin_based_exec_ctrl, 3, 1))) {
+
+	if (check_bit(vm_entry_intr_info, 31, 1) &&
+	    ((vm_entry_intr_info >> 8) & 0x7) == 2 &&
+	    (check_bit(pin_based_exec_ctrl, 3, 1))) {
 		if (check_bit(interruptibility, 3, 1)) {
 			//Bit 3 (blocking by NMI)
 			pr_info("[OUR-VMCS-ERROR] 5.14\n");
@@ -303,15 +336,15 @@ void hypx86_check_guest_part5(void) {
 	// Pending debug exceptions
 	//pending_debug_except
 	if (check_bit(pending_debug_except, 13, 1) ||
-		check_bit(pending_debug_except, 15, 1) ||
-		(pending_debug_except & 0xff0) ||
-		(pending_debug_except >> 17)) {
+	    check_bit(pending_debug_except, 15, 1) ||
+	    (pending_debug_except & 0xff0) ||
+	    (pending_debug_except >> 17)) {
 		pr_info("[OUR-VMCS-ERROR] 5.17\n");
 	}
 
 	if (check_bit(interruptibility, 0, 1) ||
-		check_bit(interruptibility, 1, 1) ||
-		activity_state == GUEST_ACTIVITY_HLT) {
+	    check_bit(interruptibility, 1, 1) ||
+	    activity_state == GUEST_ACTIVITY_HLT) {
 		if (check_bit(rflags, 8, 1) && check_bit(ia32_debug_ctl, 1, 0)) {
 			if (check_bit(pending_debug_except, 14, 0)) {
 				pr_info("[OUR-VMCS-ERROR] 5.18\n");
@@ -325,7 +358,7 @@ void hypx86_check_guest_part5(void) {
 
 	if (check_bit(pending_debug_except, 16, 1)) {
 		if ((pending_debug_except & 0xfffffffffffeefff) ||
-				check_bit(pending_debug_except, 12, 0)) {
+		    check_bit(pending_debug_except, 12, 0)) {
 			pr_info("[OUR-VMCS-ERROR] 5.20\n");
 		}
 		if (check_bit(interruptibility, 1, 1)) {
@@ -419,7 +452,7 @@ void hypx86_check_guest_part6(void) {
 	u64 cr0 = vmcs_readl(GUEST_CR0);
 	u64 cr4 = vmcs_readl(GUEST_CR4);
 	u32 vmentry_ctl = vmcs_read32(VM_ENTRY_CONTROLS);
-	
+
 	if (check_bit(cr0, 31, 1) && check_bit(cr4, 5, 1) && check_bit(vmentry_ctl, 9, 0)) {
 		pr_info("[OUR-VMCS-WARNING] 6.1 : plz make a check on sth (go to look it up in intel manual)\n");
 	}
@@ -810,7 +843,7 @@ void hypx86_check_guest_part2(void) {
 }
 
 void hypx86_check_guest_state_field(void) {
-// 26.3.1 Checks on the Guest State Area		
+// 26.3.1 Checks on the Guest State Area
 	pr_info("[OUR-VMCS-LOG] enter hypx86_check_guest_state_field");
 	hypx86_check_guest_part1();
 	hypx86_check_guest_part2();
@@ -829,21 +862,21 @@ void hypx86_switch_to_nonroot(void) {
 
   	asm(
 		__ex(ASM_VMX_VMWRITE_RSP_RDX) "\n\t"
-			: : "d"((unsigned long)HOST_RSP)
+		: : "d"((unsigned long)HOST_RSP)
 		);
 	dump_vmcs();
 	hypx86_check_guest_state_field();
-  	asm(
-		__ex(ASM_VMX_VMWRITE_RSP_RDX) "\n\t"
-		__ex(ASM_VMX_VMLAUNCH) "\n\t"
-		"2: "
-		".pushsection .rodata \n\t"
-		".global hypx86_return \n\t"
-		"hypx86_return: " _ASM_PTR " 2b \n\t"
-		".popsection"
-	      : : "d"((unsigned long)GUEST_RSP)
-	      : "cc", "memory"
-	      );
+  	// asm(
+	// 	__ex(ASM_VMX_VMWRITE_RSP_RDX) "\n\t"
+	// 	__ex(ASM_VMX_VMLAUNCH) "\n\t"
+	// 	"2: "
+	// 	".pushsection .rodata \n\t"
+	// 	".global hypx86_return \n\t"
+	// 	"hypx86_return: " _ASM_PTR " 2b \n\t"
+	// 	".popsection"
+	//       : : "d"((unsigned long)GUEST_RSP)
+	//       : "cc", "memory"
+	//       );
 
 	pr_info("[HYP-DEBUG] back in root! lowvisor\n");
 	exit_reason = vmcs_read32(VM_EXIT_REASON);
@@ -856,17 +889,17 @@ void hypx86_switch_to_nonroot(void) {
 	pr_info("[HYP-DEBUG] latest_guest_rip : %llx\n", latest_guest_rip);
 	if (always_true)
 		goto skip_nonroot;
-  	asm volatile(
-		"1: "
-		".pushsection .rodata \n\t"
-		".global highvisor_return \n\t"
-		"highvisor_return: " _ASM_PTR " 1b \n\t"
-		".popsection"
-		);
 
-	printk("[NON-ROOT-printk] I am in non-root world! highvisor\n");
-	pr_info("I am in non-root world! highvisor\n");
+	// asm volatile(
+	// 	"1: "
+	// 	".pushsection .rodata \n\t"
+	// 	".global highvisor_return \n\t"
+	// 	"highvisor_return: " _ASM_PTR " 1b \n\t"
+	// 	".popsection"
+	// 	);
 
+	// printk("[NON-ROOT-printk] I am in non-root world! highvisor\n");
+	// pr_info("I am in non-root world! highvisor\n");
 skip_nonroot:
 	return;
 }
@@ -909,9 +942,9 @@ void hypx86_init_vmcs_guest_state(void) {
 	/* TODO : Debug register : DR7 */
 	vmcs_writel(GUEST_DR7, 0x400);
 
-	/* TODO : RSP, RIP and RFLAGS */
-	//vmcs_writel(GUEST_RSP, ); // use original RSP, should be set right before vmlaunch?
-	vmcs_writel(GUEST_RIP, highvisor_return); // use address of next function after vmx_init (may be another function)
+	// /* TODO : RSP, RIP and RFLAGS */
+	// vmcs_writel(GUEST_RSP, initial_kernel_rsp); // use original RSP, should be set right before vmlaunch?
+	// vmcs_writel(GUEST_RIP, highvisor_return); // use address of next function after vmx_init (may be another function)
 
 	tmp_rip = vmcs_readl(GUEST_RIP);
 	pr_info("[HYP-DEBUG] GUEST_RIP : %llx\n", tmp_rip);
@@ -945,13 +978,13 @@ void hypx86_init_vmcs_guest_state(void) {
 
 	// two ways for GUEST_FS_BASE, GUEST_GS_BASE. not sure am I right.
 	/*
-	if (likely(is_64bit_mm(current->mm))) {
-		fs_base = current->thread.fsbase;
-		kernel_gs_base = current->thread.gsbase;
-		vmcs_writel(GUEST_FS_BASE, fs_base);
-		vmcs_writel(GUEST_GS_BASE, cpu_kernelmode_gs_base(cpu));
-		pr_info("[OUR-DEB-INFO-init_vmcs_guest_state] kernel_gs_base : %lu, cpu_kernelmode_gs_base : %lu\n", kernel_gs_base, cpu_kernelmode_gs_base(cpu));
-	}*/
+	  if (likely(is_64bit_mm(current->mm))) {
+	  fs_base = current->thread.fsbase;
+	  kernel_gs_base = current->thread.gsbase;
+	  vmcs_writel(GUEST_FS_BASE, fs_base);
+	  vmcs_writel(GUEST_GS_BASE, cpu_kernelmode_gs_base(cpu));
+	  pr_info("[OUR-DEB-INFO-init_vmcs_guest_state] kernel_gs_base : %lu, cpu_kernelmode_gs_base : %lu\n", kernel_gs_base, cpu_kernelmode_gs_base(cpu));
+	  }*/
 	rdmsrl(MSR_FS_BASE, tmpl);
 	vmcs_writel(GUEST_FS_BASE, tmpl);
 	rdmsrl(MSR_GS_BASE, tmpl);
@@ -959,7 +992,7 @@ void hypx86_init_vmcs_guest_state(void) {
 
 	vmcs_writel(GUEST_LDTR_BASE, 0);	// not sure. should read from host as well?
 	vmcs_writel(GUEST_TR_BASE,
-			(unsigned long)&get_cpu_entry_area(cpu)->tss.x86_tss);
+		    (unsigned long)&get_cpu_entry_area(cpu)->tss.x86_tss);
 
 	/* segment limit : not so important? not sure at all*/
 	vmcs_write32(GUEST_CS_LIMIT, -1);
@@ -976,13 +1009,13 @@ void hypx86_init_vmcs_guest_state(void) {
 	vmcs_write32(GUEST_CS_AR_BYTES, 0xa09b);
 	vmcs_write32(GUEST_SS_AR_BYTES, 0xc093);
 	vmcs_write32(GUEST_DS_AR_BYTES,
-		vmcs_read16(GUEST_DS_SELECTOR) == 0 ? 0x10000 : 0xc093);
+		     vmcs_read16(GUEST_DS_SELECTOR) == 0 ? 0x10000 : 0xc093);
 	vmcs_write32(GUEST_ES_AR_BYTES,
-		vmcs_read16(GUEST_ES_SELECTOR) == 0 ? 0x10000 : 0xc093);
+		     vmcs_read16(GUEST_ES_SELECTOR) == 0 ? 0x10000 : 0xc093);
 	vmcs_write32(GUEST_FS_AR_BYTES,
-		vmcs_read16(GUEST_FS_SELECTOR) == 0 ? 0x10000 : 0xc093);
+		     vmcs_read16(GUEST_FS_SELECTOR) == 0 ? 0x10000 : 0xc093);
 	vmcs_write32(GUEST_GS_AR_BYTES,
-		vmcs_read16(GUEST_GS_SELECTOR) == 0 ? 0x10000 : 0xc093);
+		     vmcs_read16(GUEST_GS_SELECTOR) == 0 ? 0x10000 : 0xc093);
 	//vmcs_write32(GUEST_LDTR_AR_BYTES, 0x10000);
 	vmcs_write32(GUEST_LDTR_AR_BYTES, 0x8082);
 	vmcs_write32(GUEST_TR_AR_BYTES, 0x8b);
@@ -1034,9 +1067,9 @@ void hypx86_init_vmcs_guest_state(void) {
 		vmcs_write64(GUEST_IA32_EFER, low32 | ((u64) high32 << 32));
 	}
 	if (kvm_mpx_supported()) {
-	//if (boot_cpu_has(X86_FEATURE_MPX)) {
-	//	rdmsrl(MSR_IA32_BNDCFGS, tmpl);
-	//	vmcs_write64(GUEST_BNDCFGS, tmpl);
+		//if (boot_cpu_has(X86_FEATURE_MPX)) {
+		//	rdmsrl(MSR_IA32_BNDCFGS, tmpl);
+		//	vmcs_write64(GUEST_BNDCFGS, tmpl);
 		vmcs_write64(GUEST_BNDCFGS, 0);
 		// not sure
 	}
@@ -1062,7 +1095,7 @@ void hypx86_init_vmcs_guest_state(void) {
 	vmcs_writel(GUEST_PENDING_DBG_EXCEPTIONS, 0);
 	//vmcs_write64(VMCS_LINK_POINTER, 0xffffffffffffffff);
 	vmcs_write64(VMCS_LINK_POINTER, -1ul);
-		// we don't have shadow vmcs?
+	// we don't have shadow vmcs?
 	vmcs_write32(VMX_PREEMPTION_TIMER_VALUE, 0);
 	vmcs_write32(GUEST_PDPTR0, 0);
 	vmcs_write32(GUEST_PDPTR0_HIGH, 0);
@@ -1072,7 +1105,7 @@ void hypx86_init_vmcs_guest_state(void) {
 	vmcs_write32(GUEST_PDPTR2_HIGH, 0);
 	vmcs_write32(GUEST_PDPTR3, 0);
 	vmcs_write32(GUEST_PDPTR3_HIGH, 0);
-		// if we enable EPT then we need to change PDPTR
+	// if we enable EPT then we need to change PDPTR
 	vmcs_write16(GUEST_INTR_STATUS, 0);
 	vmcs_write16(GUEST_PML_INDEX, 0);
 }
@@ -1121,7 +1154,7 @@ void hypx86_init_vmcs_host_state(void) {
 
 
 	/* RSP, RIP*/
-	vmcs_writel(HOST_RSP, (u64)&low_visor_stack[LOW_VISOR_STACK_SIZE]);
+	vmcs_writel(HOST_RSP, (u64)&lowvisor_stack[LOW_VISOR_STACK_SIZE]);
 	vmcs_writel(HOST_RIP, hypx86_return);
 
 
@@ -1148,7 +1181,7 @@ void hypx86_init_vmcs_host_state(void) {
 	pr_info("[OUR-DEB-INFO] kernel_gs_base : %lu, cpu_kernelmode_gs_base : %lu\n", kernel_gs_base, cpu_kernelmode_gs_base(cpu));
 
 	vmcs_writel(HOST_TR_BASE,
-			(unsigned long)&get_cpu_entry_area(cpu)->tss.x86_tss);
+		    (unsigned long)&get_cpu_entry_area(cpu)->tss.x86_tss);
 	vmcs_writel(HOST_GDTR_BASE, (unsigned long)gdt);
 
 	store_idt(&dt);
@@ -1179,7 +1212,7 @@ void hypx86_init_vmcs_control_fields(void) {
 	u32 min = 0, opt = 0;
 	//u32 tmp = 0;
 	u64 pin_based_vm_exec_control = 0;
-    //u32 pin_based_high32 = 0;
+	//u32 pin_based_high32 = 0;
 	u64 cpu_based_exec_control = 0;
 	//u32 cpu_based_2nd_exec_control = 0;
 	//u32 _vmexit_control = 0;
@@ -1197,22 +1230,45 @@ void hypx86_init_vmcs_control_fields(void) {
 	 */
 	min = PIN_BASED_EXT_INTR_MASK | PIN_BASED_NMI_EXITING;
 	opt = PIN_BASED_VIRTUAL_NMIS | PIN_BASED_POSTED_INTR |
-			PIN_BASED_VMX_PREEMPTION_TIMER;
+		PIN_BASED_VMX_PREEMPTION_TIMER;
 	pin_based_vm_exec_control = get_control_field_value(min, 0, MSR_IA32_VMX_PINBASED_CTLS);
 	pr_info("pin_based_vm_ctl from rdmsr: %llx\n", pin_based_vm_exec_control);
 	//vmcs_write32(PIN_BASED_VM_EXEC_CONTROL, get_control_field_value(0, 0, MSR_IA32_VMX_PINBASED_CTLS));
-    pin_based_vm_exec_control &= ~PIN_BASED_EXT_INTR_MASK;
-    pin_based_vm_exec_control &= ~PIN_BASED_NMI_EXITING;
-    pin_based_vm_exec_control &= ~PIN_BASED_VIRTUAL_NMIS;
-    pin_based_vm_exec_control &= ~PIN_BASED_VMX_PREEMPTION_TIMER;
-    pin_based_vm_exec_control &= ~PIN_BASED_POSTED_INTR;
-    vmcs_write32(PIN_BASED_VM_EXEC_CONTROL, pin_based_vm_exec_control);
+	pin_based_vm_exec_control &= ~PIN_BASED_EXT_INTR_MASK;
+	pin_based_vm_exec_control &= ~PIN_BASED_NMI_EXITING;
+	pin_based_vm_exec_control &= ~PIN_BASED_VIRTUAL_NMIS;
+	pin_based_vm_exec_control &= ~PIN_BASED_VMX_PREEMPTION_TIMER;
+	pin_based_vm_exec_control &= ~PIN_BASED_POSTED_INTR;
+	vmcs_write32(PIN_BASED_VM_EXEC_CONTROL, pin_based_vm_exec_control);
 
 
-    rdmsrl(MSR_IA32_VMX_PROCBASED_CTLS, cpu_based_exec_control);
+	rdmsrl(MSR_IA32_VMX_PROCBASED_CTLS, cpu_based_exec_control);
 	// bit 28 use MSR bitmaps
 	cpu_based_exec_control |= (1 << 28);
-    vmcs_write32(CPU_BASED_VM_EXEC_CONTROL, cpu_based_exec_control);
+	cpu_based_exec_control &= ~CPU_BASED_VIRTUAL_INTR_PENDING;
+	cpu_based_exec_control &= ~CPU_BASED_USE_TSC_OFFSETING;
+	cpu_based_exec_control &= ~CPU_BASED_HLT_EXITING;
+	cpu_based_exec_control &= ~CPU_BASED_INVLPG_EXITING;
+	cpu_based_exec_control &= ~CPU_BASED_MWAIT_EXITING;
+	cpu_based_exec_control &= ~CPU_BASED_RDPMC_EXITING;
+	cpu_based_exec_control &= ~CPU_BASED_RDTSC_EXITING;
+	cpu_based_exec_control &= ~CPU_BASED_CR3_LOAD_EXITING;
+	cpu_based_exec_control &= ~CPU_BASED_CR3_STORE_EXITING;
+	cpu_based_exec_control &= ~CPU_BASED_CR8_LOAD_EXITING;
+	cpu_based_exec_control &= ~CPU_BASED_CR8_STORE_EXITING;
+	cpu_based_exec_control &= ~CPU_BASED_TPR_SHADOW;
+	cpu_based_exec_control &= ~CPU_BASED_VIRTUAL_NMI_PENDING;
+	cpu_based_exec_control &= ~CPU_BASED_MOV_DR_EXITING;
+	cpu_based_exec_control &= ~CPU_BASED_UNCOND_IO_EXITING;
+	cpu_based_exec_control &= ~CPU_BASED_USE_IO_BITMAPS;
+	cpu_based_exec_control &= ~CPU_BASED_MONITOR_TRAP_FLAG;
+	cpu_based_exec_control &= ~CPU_BASED_USE_MSR_BITMAPS;
+	cpu_based_exec_control &= ~CPU_BASED_MONITOR_EXITING;
+	cpu_based_exec_control &= ~CPU_BASED_PAUSE_EXITING;
+	cpu_based_exec_control &= ~CPU_BASED_ACTIVATE_SECONDARY_CONTROLS;
+	
+
+	vmcs_write32(CPU_BASED_VM_EXEC_CONTROL, cpu_based_exec_control);
 	vmcs_write32(EXCEPTION_BITMAP, 0);	// we can control page-fault here
 	vmcs_write32(PAGE_FAULT_ERROR_CODE_MASK, 0);
 	vmcs_write32(PAGE_FAULT_ERROR_CODE_MATCH, -1); /* never match, I don't know what is this */
@@ -1254,19 +1310,12 @@ void hypx86_init_vmcs_control_fields(void) {
 	/* VM-exit information fields */
 }
 
-/* handlers jump table */
-int (*const hyp_exit_handlers[])(struct kvm_vcpu *vcpu) = {
-	[] = ,
-	[] = ,
-	[EXIT_REASON_CPUID] = hyp_handle_cpuid,
-};
-
 
 
 int hyp_handle_cpuid(struct kvm_vcpu *vcpu)
 {
 	u32 eax, ebx, ecx, edx;
-	u64 rip;
+	//u64 rip;
 
 	eax = hyp_register_read(vcpu, VCPU_REGS_RAX);
 	ecx = hyp_register_read(vcpu, VCPU_REGS_RCX);
@@ -1277,4 +1326,159 @@ int hyp_handle_cpuid(struct kvm_vcpu *vcpu)
 	kvm_register_write(vcpu, VCPU_REGS_RDX, edx);
 
 	return hyp_skip_emulated_instruction(vcpu);
+}
+
+/* handlers jump table */
+int (*const hyp_exit_handlers[])(struct kvm_vcpu *vcpu) = {
+	[EXIT_REASON_CPUID] = hyp_handle_cpuid,
+};
+
+static volatile int exit_reason;
+static volatile int vm_inst_error;
+static volatile unsigned long exit_qualification;
+static volatile bool always_true = true;
+static volatile u64 latest_guest_rip;
+void run_hyp_kernel(void) {
+/* brutally change stack , TODO: should reserve space for local vars */
+	
+	asm volatile("mov %0, %%" _ASM_SP " \n\t": : "c"(lowvisor_stack_end));
+resume_kernel:
+	vmcs_writel(GUEST_RSP, kernel_vmx.vcpu.arch.regs[VCPU_REGS_RSP]);
+	vmcs_writel(GUEST_RIP, kernel_vmx.vcpu.arch.regs[VCPU_REGS_RIP]);
+
+
+	kernel_vmx.__launched = kernel_vmx.vmcs01.launched;
+
+
+
+	pr_info("[HYP-DEBUG] launch into nonroot kernel\n");
+	asm(
+		/* Store host registers */
+		"push %%" _ASM_DX "; push %%" _ASM_BP ";"
+		"push %%" _ASM_CX " \n\t" /* placeholder for guest rcx */
+		"push %%" _ASM_CX " \n\t"
+		"2: \n\t"
+		__ex(ASM_VMX_VMWRITE_RSP_RDX) "\n\t"
+		"1: \n\t"
+		/* Check if vmlaunch of vmresume is needed */
+		"cmpl $0, %c[launched](%0) \n\t"
+		/* Load guest registers.  Don't clobber flags. */
+		"mov %c[rax](%0), %%" _ASM_AX " \n\t"
+		"mov %c[rbx](%0), %%" _ASM_BX " \n\t"
+		"mov %c[rdx](%0), %%" _ASM_DX " \n\t"
+		"mov %c[rsi](%0), %%" _ASM_SI " \n\t"
+		"mov %c[rdi](%0), %%" _ASM_DI " \n\t"
+		"mov %c[rbp](%0), %%" _ASM_BP " \n\t"
+#ifdef CONFIG_X86_64
+		"mov %c[r8](%0),  %%r8  \n\t"
+		"mov %c[r9](%0),  %%r9  \n\t"
+		"mov %c[r10](%0), %%r10 \n\t"
+		"mov %c[r11](%0), %%r11 \n\t"
+		"mov %c[r12](%0), %%r12 \n\t"
+		"mov %c[r13](%0), %%r13 \n\t"
+		"mov %c[r14](%0), %%r14 \n\t"
+		"mov %c[r15](%0), %%r15 \n\t"
+#endif
+		"mov %c[rcx](%0), %%" _ASM_CX " \n\t" /* kills %0 (ecx) */
+
+		/* Enter guest mode */
+		"jne 1f \n\t"
+		__ex(ASM_VMX_VMLAUNCH) "\n\t"
+		"jmp 2f \n\t"
+		"1: " __ex(ASM_VMX_VMRESUME) "\n\t"
+		"2: "
+		/* Save guest registers, load host registers, keep flags */
+		"mov %0, %c[wordsize](%%" _ASM_SP ") \n\t"
+		"pop %0 \n\t"
+		"setbe %c[fail](%0)\n\t"
+		"mov %%" _ASM_AX ", %c[rax](%0) \n\t"
+		"mov %%" _ASM_BX ", %c[rbx](%0) \n\t"
+		__ASM_SIZE(pop) " %c[rcx](%0) \n\t"
+		"mov %%" _ASM_DX ", %c[rdx](%0) \n\t"
+		"mov %%" _ASM_SI ", %c[rsi](%0) \n\t"
+		"mov %%" _ASM_DI ", %c[rdi](%0) \n\t"
+		"mov %%" _ASM_BP ", %c[rbp](%0) \n\t"
+#ifdef CONFIG_X86_64
+		"mov %%r8,  %c[r8](%0) \n\t"
+		"mov %%r9,  %c[r9](%0) \n\t"
+		"mov %%r10, %c[r10](%0) \n\t"
+		"mov %%r11, %c[r11](%0) \n\t"
+		"mov %%r12, %c[r12](%0) \n\t"
+		"mov %%r13, %c[r13](%0) \n\t"
+		"mov %%r14, %c[r14](%0) \n\t"
+		"mov %%r15, %c[r15](%0) \n\t"
+		"xor %%r8d,  %%r8d \n\t"
+		"xor %%r9d,  %%r9d \n\t"
+		"xor %%r10d, %%r10d \n\t"
+		"xor %%r11d, %%r11d \n\t"
+		"xor %%r12d, %%r12d \n\t"
+		"xor %%r13d, %%r13d \n\t"
+		"xor %%r14d, %%r14d \n\t"
+		"xor %%r15d, %%r15d \n\t"
+#endif
+		"mov %%cr2, %%" _ASM_AX "   \n\t"
+		"mov %%" _ASM_AX ", %c[cr2](%0) \n\t"
+
+		"xor %%eax, %%eax \n\t"
+		"xor %%ebx, %%ebx \n\t"
+		"xor %%esi, %%esi \n\t"
+		"xor %%edi, %%edi \n\t"
+		"pop  %%" _ASM_BP "; pop  %%" _ASM_DX " \n\t"
+		".pushsection .rodata \n\t"
+		".global hypx86_return \n\t"
+		"hypx86_return: " _ASM_PTR " 2b \n\t"
+		".popsection"
+		: : "c"(&kernel_vmx), "d"((unsigned long)HOST_RSP),
+		  [launched]"i"(offsetof(struct vcpu_vmx, __launched)),
+		  [fail]"i"(offsetof(struct vcpu_vmx, fail)),
+		  [host_rsp]"i"(offsetof(struct vcpu_vmx, host_rsp)),
+		  [rax]"i"(offsetof(struct vcpu_vmx, vcpu.arch.regs[VCPU_REGS_RAX])),
+		  [rbx]"i"(offsetof(struct vcpu_vmx, vcpu.arch.regs[VCPU_REGS_RBX])),
+		  [rcx]"i"(offsetof(struct vcpu_vmx, vcpu.arch.regs[VCPU_REGS_RCX])),
+		  [rdx]"i"(offsetof(struct vcpu_vmx, vcpu.arch.regs[VCPU_REGS_RDX])),
+		  [rsi]"i"(offsetof(struct vcpu_vmx, vcpu.arch.regs[VCPU_REGS_RSI])),
+		  [rdi]"i"(offsetof(struct vcpu_vmx, vcpu.arch.regs[VCPU_REGS_RDI])),
+		  [rbp]"i"(offsetof(struct vcpu_vmx, vcpu.arch.regs[VCPU_REGS_RBP])),
+#ifdef CONFIG_X86_64
+		  [r8]"i"(offsetof(struct vcpu_vmx, vcpu.arch.regs[VCPU_REGS_R8])),
+		  [r9]"i"(offsetof(struct vcpu_vmx, vcpu.arch.regs[VCPU_REGS_R9])),
+		  [r10]"i"(offsetof(struct vcpu_vmx, vcpu.arch.regs[VCPU_REGS_R10])),
+		  [r11]"i"(offsetof(struct vcpu_vmx, vcpu.arch.regs[VCPU_REGS_R11])),
+		  [r12]"i"(offsetof(struct vcpu_vmx, vcpu.arch.regs[VCPU_REGS_R12])),
+		  [r13]"i"(offsetof(struct vcpu_vmx, vcpu.arch.regs[VCPU_REGS_R13])),
+		  [r14]"i"(offsetof(struct vcpu_vmx, vcpu.arch.regs[VCPU_REGS_R14])),
+		  [r15]"i"(offsetof(struct vcpu_vmx, vcpu.arch.regs[VCPU_REGS_R15])),
+#endif
+		  [cr2]"i"(offsetof(struct vcpu_vmx, vcpu.arch.cr2)),
+		  [wordsize]"i"(sizeof(ulong))
+		: "cc", "memory"
+#ifdef CONFIG_X86_64
+		  , "rax", "rbx", "rdi"
+		  , "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15"
+#else
+		  , "eax", "ebx", "edi"
+#endif
+		);
+
+	pr_info("[HYP-DEBUG] back in root! lowvisor\n");
+	exit_reason = vmcs_read32(VM_EXIT_REASON);
+	pr_info("[HYP-DEBUG] vm exit reason: %x\n", exit_reason);
+	exit_qualification = vmcs_readl(EXIT_QUALIFICATION);
+	pr_info("[HYP-DEBUG] vm qualification reason: %lx\n", exit_qualification);
+	vm_inst_error = vmcs_read32(VM_INSTRUCTION_ERROR);
+	pr_info("[HYP-DEBUG] vm instruction error: %u\n", vm_inst_error);
+	latest_guest_rip = vmcs_readl(GUEST_RIP);
+	pr_info("[HYP-DEBUG] latest_guest_rip : %llx\n", latest_guest_rip);
+
+
+	kernel_vmx.vmcs01.launched = 1;
+	/* handle exits */
+	hyp_exit_handlers[exit_reason](&kernel_vmx.vcpu);
+
+	if (always_true)
+		goto resume_kernel;
+}
+
+void resume_hyp_kernel(void) {
+
 }
