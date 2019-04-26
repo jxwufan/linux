@@ -1,5 +1,6 @@
 #include <asm/msr.h>
 #define LOW_VISOR_STACK_SIZE 4096
+#define LOCAL_RESERVED_REGION 64
 
 #define EXIT_REASON_CPUID 10
 

@@ -1292,7 +1292,7 @@ void hypx86_init_vmcs_control_fields(void) {
 int hyp_handle_cpuid(struct kvm_vcpu *vcpu)
 {
 	u32 eax, ebx, ecx, edx;
-	u64 rip;
+	//u64 rip;
 
 	eax = hyp_register_read(vcpu, VCPU_REGS_RAX);
 	ecx = hyp_register_read(vcpu, VCPU_REGS_RCX);
@@ -1310,15 +1310,15 @@ int (*const hyp_exit_handlers[])(struct kvm_vcpu *vcpu) = {
 	[EXIT_REASON_CPUID] = hyp_handle_cpuid,
 };
 
+static volatile int exit_reason;
+static volatile int vm_inst_error;
+static volatile unsigned long exit_qualification;
+static volatile bool always_true = true;
+static volatile u64 latest_guest_rip;
 void run_hyp_kernel(void) {
-
 /* brutally change stack , TODO: should reserve space for local vars */
-asm volatile("mov %0, %%" _ASM_SP " \n\t": : "c"(lowvisor_stack_end));
-	volatile int exit_reason;
-	volatile int vm_inst_error;
-	volatile unsigned long exit_qualification;
-	volatile bool always_true = true;
-	volatile u64 latest_guest_rip;
+	
+	asm volatile("mov %0, %%" _ASM_SP " \n\t": : "c"(lowvisor_stack_end));
 resume_kernel:
 	vmcs_writel(GUEST_RSP, kernel_vmx.vcpu.arch.regs[VCPU_REGS_RSP]);
 	vmcs_writel(GUEST_RIP, kernel_vmx.vcpu.arch.regs[VCPU_REGS_RIP]);

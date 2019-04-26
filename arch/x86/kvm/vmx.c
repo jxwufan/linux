@@ -13141,6 +13141,7 @@ static struct kvm_x86_ops vmx_x86_ops __ro_after_init = {
 static int __init vmx_init(void)
 {
 	int r;
+	unsigned long rcx;
 
 #if IS_ENABLED(CONFIG_HYPERV)
 	/*
@@ -13184,7 +13185,6 @@ static int __init vmx_init(void)
 
 	/* save register here */
 	pr_info("[HYP-DEBUG] Saving kernel register\n");
-	unsigned long rcx;
 
 	/* store the rcx */
 	asm volatile("mov %%" _ASM_CX ", %0": "=r"(rcx));
@@ -13234,7 +13234,7 @@ static int __init vmx_init(void)
 	asm volatile("mov %%" _ASM_SP ", %0": "=r"(initial_kernel_rsp));
 	kernel_vmx.vcpu.arch.regs[VCPU_REGS_RSP] = initial_kernel_rsp;
 	kernel_vmx.vcpu.arch.regs[VCPU_REGS_RIP] = highvisor_return;
-	lowvisor_stack_end = lowvisor_stack + LOW_VISOR_STACK_SIZE;
+	lowvisor_stack_end = (unsigned long)lowvisor_stack + LOW_VISOR_STACK_SIZE - LOCAL_RESERVED_REGION;
 	pr_info("[OUR-DEV-INFO] in vmx_init. Check pr_info\n");
 
 	/*
