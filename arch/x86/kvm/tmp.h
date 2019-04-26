@@ -1245,28 +1245,28 @@ void hypx86_init_vmcs_control_fields(void) {
 	rdmsrl(MSR_IA32_VMX_PROCBASED_CTLS, cpu_based_exec_control);
 	// bit 28 use MSR bitmaps
 	cpu_based_exec_control |= (1 << 28);
-	cpu_based_exec_control &= ~CPU_BASED_VIRTUAL_INTR_PENDING;
-	cpu_based_exec_control &= ~CPU_BASED_USE_TSC_OFFSETING;
-	cpu_based_exec_control &= ~CPU_BASED_HLT_EXITING;
-	cpu_based_exec_control &= ~CPU_BASED_INVLPG_EXITING;
-	cpu_based_exec_control &= ~CPU_BASED_MWAIT_EXITING;
-	cpu_based_exec_control &= ~CPU_BASED_RDPMC_EXITING;
-	cpu_based_exec_control &= ~CPU_BASED_RDTSC_EXITING;
-	cpu_based_exec_control &= ~CPU_BASED_CR3_LOAD_EXITING;
+	// cpu_based_exec_control &= ~CPU_BASED_VIRTUAL_INTR_PENDING;
+	// cpu_based_exec_control &= ~CPU_BASED_USE_TSC_OFFSETING;
+	// cpu_based_exec_control &= ~CPU_BASED_HLT_EXITING;
+	// cpu_based_exec_control &= ~CPU_BASED_INVLPG_EXITING;
+	// cpu_based_exec_control &= ~CPU_BASED_MWAIT_EXITING;
+	// cpu_based_exec_control &= ~CPU_BASED_RDPMC_EXITING;
+	// cpu_based_exec_control &= ~CPU_BASED_RDTSC_EXITING;
+	// cpu_based_exec_control &= ~CPU_BASED_CR3_LOAD_EXITING;
 	cpu_based_exec_control &= ~CPU_BASED_CR3_STORE_EXITING;
-	cpu_based_exec_control &= ~CPU_BASED_CR8_LOAD_EXITING;
-	cpu_based_exec_control &= ~CPU_BASED_CR8_STORE_EXITING;
-	cpu_based_exec_control &= ~CPU_BASED_TPR_SHADOW;
-	cpu_based_exec_control &= ~CPU_BASED_VIRTUAL_NMI_PENDING;
-	cpu_based_exec_control &= ~CPU_BASED_MOV_DR_EXITING;
-	cpu_based_exec_control &= ~CPU_BASED_UNCOND_IO_EXITING;
-	cpu_based_exec_control &= ~CPU_BASED_USE_IO_BITMAPS;
-	cpu_based_exec_control &= ~CPU_BASED_MONITOR_TRAP_FLAG;
-	cpu_based_exec_control &= ~CPU_BASED_USE_MSR_BITMAPS;
-	cpu_based_exec_control &= ~CPU_BASED_MONITOR_EXITING;
-	cpu_based_exec_control &= ~CPU_BASED_PAUSE_EXITING;
-	cpu_based_exec_control &= ~CPU_BASED_ACTIVATE_SECONDARY_CONTROLS;
-	
+	// cpu_based_exec_control &= ~CPU_BASED_CR8_LOAD_EXITING;
+	// cpu_based_exec_control &= ~CPU_BASED_CR8_STORE_EXITING;
+	// cpu_based_exec_control &= ~CPU_BASED_TPR_SHADOW;
+	// cpu_based_exec_control &= ~CPU_BASED_VIRTUAL_NMI_PENDING;
+	// cpu_based_exec_control &= ~CPU_BASED_MOV_DR_EXITING;
+	// cpu_based_exec_control &= ~CPU_BASED_UNCOND_IO_EXITING;
+	// cpu_based_exec_control &= ~CPU_BASED_USE_IO_BITMAPS;
+	// cpu_based_exec_control &= ~CPU_BASED_MONITOR_TRAP_FLAG;
+	// cpu_based_exec_control &= ~CPU_BASED_USE_MSR_BITMAPS;
+	// cpu_based_exec_control &= ~CPU_BASED_MONITOR_EXITING;
+	// cpu_based_exec_control &= ~CPU_BASED_PAUSE_EXITING;
+	// cpu_based_exec_control &= ~CPU_BASED_ACTIVATE_SECONDARY_CONTROLS;
+
 
 	vmcs_write32(CPU_BASED_VM_EXEC_CONTROL, cpu_based_exec_control);
 	vmcs_write32(EXCEPTION_BITMAP, 0);	// we can control page-fault here
@@ -1340,16 +1340,20 @@ static volatile bool always_true = true;
 static volatile u64 latest_guest_rip;
 void run_hyp_kernel(void) {
 /* brutally change stack , TODO: should reserve space for local vars */
-	
+
 	asm volatile("mov %0, %%" _ASM_SP " \n\t": : "c"(lowvisor_stack_end));
-resume_kernel:
+
 	vmcs_writel(GUEST_RSP, kernel_vmx.vcpu.arch.regs[VCPU_REGS_RSP]);
+
+
+	hypx86_check_guest_state_field();
+resume_kernel:
 	vmcs_writel(GUEST_RIP, kernel_vmx.vcpu.arch.regs[VCPU_REGS_RIP]);
 
 
 	kernel_vmx.__launched = kernel_vmx.vmcs01.launched;
 
-
+	dump_vmcs();
 
 	pr_info("[HYP-DEBUG] launch into nonroot kernel\n");
 	asm(
@@ -1462,9 +1466,9 @@ resume_kernel:
 
 	pr_info("[HYP-DEBUG] back in root! lowvisor\n");
 	exit_reason = vmcs_read32(VM_EXIT_REASON);
-	pr_info("[HYP-DEBUG] vm exit reason: %x\n", exit_reason);
+	pr_info("[HYP-DEBUG] vm exit reason: 0x%x, %u\n", exit_reason, exit_reason);
 	exit_qualification = vmcs_readl(EXIT_QUALIFICATION);
-	pr_info("[HYP-DEBUG] vm qualification reason: %lx\n", exit_qualification);
+	pr_info("[HYP-DEBUG] vm qualification reason: 0x%lx, %u\n", exit_qualification, exit_qualification);
 	vm_inst_error = vmcs_read32(VM_INSTRUCTION_ERROR);
 	pr_info("[HYP-DEBUG] vm instruction error: %u\n", vm_inst_error);
 	latest_guest_rip = vmcs_readl(GUEST_RIP);
