@@ -21,8 +21,7 @@ void hypx86_init_vmcs_host_state(void);
 void hypx86_init_vmcs_control_fields(void);
 void hypx86_switch_to_nonroot(void);
 
-static inline unsigned long hyp_register_read(struct kvm_vcpu *vcpu,
-											  enum kvm_reg reg)
+static inline unsigned long hyp_register_read(struct kvm_vcpu *vcpu, enum kvm_reg reg)
 {
 	//if (!test_bit(reg, (unsigned long *)&vcpu->arch.regs_avail))
 		//kvm_x86_ops->cache_reg(vcpu, reg);
@@ -30,9 +29,7 @@ static inline unsigned long hyp_register_read(struct kvm_vcpu *vcpu,
 	return vcpu->arch.regs[reg];
 }
 
-static inline void hyp_register_write(struct kvm_vcpu *vcpu,
-									  enum kvm_reg reg,
-									  unsigned long val)
+static inline void hyp_register_write(struct kvm_vcpu *vcpu, enum kvm_reg reg, unsigned long val)
 {
 	vcpu->arch.regs[reg] = val;
 	// these two lines may be useless for our simple implementation
