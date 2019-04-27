@@ -1346,7 +1346,7 @@ void run_hyp_kernel(void) {
 	vmcs_writel(GUEST_RSP, kernel_vmx.vcpu.arch.regs[VCPU_REGS_RSP]);
 
 
-	hypx86_check_guest_state_field();
+
 resume_kernel:
 	vmcs_writel(GUEST_RIP, kernel_vmx.vcpu.arch.regs[VCPU_REGS_RIP]);
 
@@ -1354,8 +1354,8 @@ resume_kernel:
 	kernel_vmx.__launched = kernel_vmx.vmcs01.launched;
 
 	dump_vmcs();
-
-	pr_err("[HYP-DEBUG] launch into nonroot kernel\n");
+	hypx86_check_guest_state_field();
+	pr_err("[HYP-DEBUG] launch into nonroot kernel with guest rip = %lx\n", vmcs_readl(GUEST_RIP));
 	asm(
 		/* Store host registers */
 		"push %%" _ASM_DX "; push %%" _ASM_BP ";"
@@ -1476,6 +1476,9 @@ resume_kernel:
 
 
 	kernel_vmx.vmcs01.launched = 1;
+
+	// update vcpu cache
+	kernel_vmx.vcpu.arch.regs[VCPU_REGS_RIP] = latest_guest_rip;
 	/* handle exits */
 	hyp_exit_handlers[exit_reason](&kernel_vmx.vcpu);
 
