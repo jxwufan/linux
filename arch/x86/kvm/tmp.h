@@ -936,7 +936,7 @@ void hypx86_init_vmcs_guest_state(void) {
 	vmcs_writel(GUEST_CR3, cr3);
 
 	cr4 = cr4_read_shadow();
-	cr4 &= ~((u64)1 << 17);
+	// cr4 &= ~((u64)1 << 17);
 	vmcs_writel(GUEST_CR4, cr4);
 
 	/* TODO : Debug register : DR7 */
