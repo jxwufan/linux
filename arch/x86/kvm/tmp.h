@@ -1470,7 +1470,7 @@ resume_kernel:
 	exit_reason = vmcs_read32(VM_EXIT_REASON);
 	pr_err("[HYP-DEBUG] vm exit reason: 0x%x, %u\n", exit_reason, exit_reason);
 	exit_qualification = vmcs_readl(EXIT_QUALIFICATION);
-	pr_err("[HYP-DEBUG] vm qualification reason: 0x%lx, %u\n", exit_qualification, exit_qualification);
+	pr_err("[HYP-DEBUG] vm qualification reason: 0x%lx, %lu\n", exit_qualification, exit_qualification);
 	vm_inst_error = vmcs_read32(VM_INSTRUCTION_ERROR);
 	pr_err("[HYP-DEBUG] vm instruction error: %u\n", vm_inst_error);
 	latest_guest_rip = vmcs_readl(GUEST_RIP);
