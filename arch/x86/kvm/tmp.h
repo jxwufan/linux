@@ -1214,7 +1214,7 @@ void hypx86_init_vmcs_control_fields(void) {
 	u64 pin_based_vm_exec_control = 0;
 	//u32 pin_based_high32 = 0;
 	u64 cpu_based_exec_control = 0;
-	//u32 cpu_based_2nd_exec_control = 0;
+	u32 cpu_based_2nd_exec_control = 0;
 	//u32 _vmexit_control = 0;
 	//u32 _vmentry_control = 0;
 	/* VM-execution control fields
@@ -1248,11 +1248,11 @@ void hypx86_init_vmcs_control_fields(void) {
 	// cpu_based_exec_control &= ~CPU_BASED_VIRTUAL_INTR_PENDING;
 	// cpu_based_exec_control &= ~CPU_BASED_USE_TSC_OFFSETING;
 	// cpu_based_exec_control &= ~CPU_BASED_HLT_EXITING;
-	// cpu_based_exec_control &= ~CPU_BASED_INVLPG_EXITING;
+	cpu_based_exec_control &= ~CPU_BASED_INVLPG_EXITING;
 	// cpu_based_exec_control &= ~CPU_BASED_MWAIT_EXITING;
 	// cpu_based_exec_control &= ~CPU_BASED_RDPMC_EXITING;
 	// cpu_based_exec_control &= ~CPU_BASED_RDTSC_EXITING;
-	// cpu_based_exec_control &= ~CPU_BASED_CR3_LOAD_EXITING;
+	cpu_based_exec_control &= ~CPU_BASED_CR3_LOAD_EXITING;
 	cpu_based_exec_control &= ~CPU_BASED_CR3_STORE_EXITING;
 	// cpu_based_exec_control &= ~CPU_BASED_CR8_LOAD_EXITING;
 	// cpu_based_exec_control &= ~CPU_BASED_CR8_STORE_EXITING;
@@ -1262,10 +1262,11 @@ void hypx86_init_vmcs_control_fields(void) {
 	// cpu_based_exec_control &= ~CPU_BASED_UNCOND_IO_EXITING;
 	// cpu_based_exec_control &= ~CPU_BASED_USE_IO_BITMAPS;
 	// cpu_based_exec_control &= ~CPU_BASED_MONITOR_TRAP_FLAG;
-	// cpu_based_exec_control &= ~CPU_BASED_USE_MSR_BITMAPS;
+	// cpu_based_exec_control &= ~CPU_BASED_USE_MSR_BITMAPS; should be 1
 	// cpu_based_exec_control &= ~CPU_BASED_MONITOR_EXITING;
 	// cpu_based_exec_control &= ~CPU_BASED_PAUSE_EXITING;
-	// cpu_based_exec_control &= ~CPU_BASED_ACTIVATE_SECONDARY_CONTROLS;
+	// activate 2nd control
+	cpu_based_exec_control |= CPU_BASED_ACTIVATE_SECONDARY_CONTROLS;
 
 
 	vmcs_write32(CPU_BASED_VM_EXEC_CONTROL, cpu_based_exec_control);
@@ -1276,7 +1277,8 @@ void hypx86_init_vmcs_control_fields(void) {
 	vmcs_write32(TPR_THRESHOLD, 0);
 
 	//cpu_based_exec_control = 0x80; // Unrestricted guest
-	vmcs_write32(SECONDARY_VM_EXEC_CONTROL, 0);
+	cpu_based_2nd_exec_control |= SECONDARY_EXEC_ENABLE_INVPCID;
+	vmcs_write32(SECONDARY_VM_EXEC_CONTROL, cpu_based_2nd_exec_control);
 	//vmcs_write32(SECONDARY_VM_EXEC_CONTROL, cpu_based_exec_control);
 	vmcs_writel(CR0_GUEST_HOST_MASK, 0);
 	vmcs_writel(CR4_GUEST_HOST_MASK, 0);
