@@ -1268,9 +1268,15 @@ void hypx86_init_vmcs_control_fields(void) {
 	// activate 2nd control
 	cpu_based_exec_control |= CPU_BASED_ACTIVATE_SECONDARY_CONTROLS;
 
+	if (cpu_has_vmx_msr_bitmap()) {
+		pr_err("[HYP-DEBUG] clear all msr bitmap\n");
+		memset(kernel_vmx.vmcs01.msr_bitmap, 0, PAGE_SIZE);
+		// actually write the msr bitmap address
+		vmcs_write64(MSR_BITMAP, __pa(kernel_vmx.vmcs01.msr_bitmap));
+	}
 
 	vmcs_write32(CPU_BASED_VM_EXEC_CONTROL, cpu_based_exec_control);
-	vmcs_write32(EXCEPTION_BITMAP, 0);	// we can control page-fault here
+	vmcs_write32(EXCEPTION_BITMAP, 0x4000);	// we can control page-fault here
 	vmcs_write32(PAGE_FAULT_ERROR_CODE_MASK, 0);
 	vmcs_write32(PAGE_FAULT_ERROR_CODE_MATCH, -1); /* never match, I don't know what is this */
 	vmcs_write32(CR3_TARGET_COUNT, 0);
